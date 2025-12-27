@@ -911,9 +911,9 @@ class Bullet {
 class Enemy {
     constructor(x, y, type) { 
         this.x = x; this.y = y; this.type = type;
-        this.health = type === 'tank' ? 200+(wave*100) : 40+(wave*25);
+        this.health = type === 'tank' ? 200+(wave*wave*100) : 40+(wave*wave*10);
         this.maxHealth = this.health;
-        this.speed = type === 'scout' ? 3.5 : (type === 'tank' ? 1.2 : 2.0);
+        this.speed = type === 'scout' ? 3.5 : (type === 'tank' ? 1.2 + 0.2*wave : 2.0*wave);
         this.baseSpeed = this.speed;
         this.damageDealt = 0;
         this.slowDuration = 0;
@@ -995,6 +995,8 @@ class Enemy {
         let targetX, targetY;
         
         // AI: Choose target based on targetType
+        targetX = core.x * TILE_SIZE + 20;
+        targetY = core.y * TILE_SIZE + 20;
         switch(this.targetType) {
             case 'core':
                 targetX = core.x * TILE_SIZE + 20;
@@ -1210,7 +1212,7 @@ function startWave() {
     document.getElementById('editorUI').classList.add('hidden');
     updateFlowField();
     
-    let count = 10 + (wave * difficulty / 10);
+    let count = 10 + (wave * difficulty / 100);
     for(let i=0; i<count; i++) {
         let side = Math.floor(Math.random()*4), rx, ry;
         if(side===0) { rx=0; ry=Math.random()*MAP_HEIGHT; }
