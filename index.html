@@ -33,6 +33,7 @@
         .crate-explosive { background: #660; border-color: #ff0; }
         .crate-sand { background: #964; border-color: #da8; }
         .crate-poison { background: #060; border-color: #0f0; }
+        .crate-air { background: #404; border-color: #f0f; }
         /* Save slots styles */
         .save-slots-container { margin: 10px 0; border: 1px solid #333; padding: 10px; }
         .save-slot { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; padding: 8px; background: #222; border: 1px solid #444; }
@@ -69,6 +70,7 @@
                 <button id="btn8" onclick="setBrush(8)">Farm ($150)</button>
                 <button id="btn9" onclick="setBrush(9)">Speed ($120)</button>
                 <button id="btn10" onclick="setBrush(10)">Range ($120)</button>
+                <button id="btn14" onclick="setBrush(14)">Fly Trap ($80)</button>
             </div>
             
             <div class="slider-group">
@@ -88,6 +90,7 @@
                 <button class="crate-explosive" onclick="setBrush(5)">Explosive ($90)</button>
                 <button class="crate-sand" onclick="setBrush(12)">Sand ($60)</button>
                 <button class="crate-poison" onclick="setBrush(13)">Poison ($70)</button>
+                <button class="crate-air" onclick="setBrush(15)">Air Gun ($110)</button>
             </div>
 
             <div id="setupControls">
@@ -110,6 +113,10 @@
                 <div class="slider-group">
                     <label>Difficulty: <span id="diffVal">50</span></label>
                     <input type="range" class="setup-input" id="diffSlider" min="10" max="100000" value="50" oninput="difficulty=parseInt(this.value); document.getElementById('diffVal').innerText=this.value">
+                </div>
+                <div class="slider-group">
+                    <label>Flyer Spawn Chance: <span id="flyerVal">20</span>%</label>
+                    <input type="range" class="setup-input" id="flyerSlider" min="0" max="100" value="20" oninput="flyerSpawnChance=parseInt(this.value); document.getElementById('flyerVal').innerText=this.value">
                 </div>
             </div>
 
@@ -150,6 +157,7 @@ let MAP_WIDTH = 30;
 let MAP_HEIGHT = 20;
 let gameState = 'EDITOR', brushType = 1, brushSize = 1, money = 2000, wave = 1, difficulty = 50;
 let currentSaveSlot = 1; // Track currently selected slot (1-5)
+let flyerSpawnChance = 20; // Percentage chance for flying enemies to spawn
 
 // Cameras
 let editCam = { x: 600, y: 400, zoom: 1.0 }; 
@@ -159,29 +167,33 @@ const TILES = {
     EMPTY: 0, WALL: 1, HEALTH: 2, CORE: 6, TURRET: 7, FARM: 8, 
     UP_SPEED: 9, UP_RANGE: 10, 
     CRATE_PIERCE: 3, CRATE_HEAVY: 4, CRATE_EXPLOSIVE: 5,
-    SAND: 12, POISON: 13
+    SAND: 12, POISON: 13,
+    FLY_TRAP: 14,  // New: Trap that catches flying enemies
+    CRATE_AIR: 15   // New: Air gun crate
 };
 
 const COSTS = { 
     1: 20, 2: 50, 7: 100, 8: 150, 9: 120, 10: 120,
-    3: 80, 4: 100, 5: 90, 12: 60, 13: 70
+    3: 80, 4: 100, 5: 90, 12: 60, 13: 70,
+    14: 80, 15: 110  // New costs
 };
 
 const COLORS = { 
     0: '#111', 1: '#555', 2: '#ff4444', 6: '#00ffff', 7: '#ff8800', 8: '#44ff44', 
     9: '#00ccff', 10: '#ff00ff', 
     3: '#0066cc', 4: '#cc3300', 5: '#cc9900',
-    12: '#daa520', 13: '#00aa00'
+    12: '#daa520', 13: '#00aa00',
+    14: '#8844aa', 15: '#ff44ff'  // New colors
 };
 
 const POWER_COLORS = { 
     'pierce': '#0ff', 'heavy': '#f00', 'explosive': '#ff0',
-    'sand': '#da8', 'poison': '#0f0' 
+    'sand': '#da8', 'poison': '#0f0', 'air': '#f0f' 
 };
 
 let map = [];
 let flowField = [];
-let players = [], bullets = [], enemies = [], turrets = [], farms = [], explosions = [], burns = [], sandTraps = [], poisonClouds = [];
+let players = [], bullets = [], enemies = [], turrets = [], farms = [], explosions = [], burns = [], sandTraps = [], poisonClouds = [], flyTraps = [], airBullets = [];
 let core = { x: 15, y: 10, hp: 1000, maxHp: 1000 };
 
 // Initialize save slots display
@@ -265,7 +277,7 @@ function saveGame() {
     }
     
     const gameData = {
-        version: '1.2',
+        version: '1.3',
         timestamp: Date.now(),
         slot: currentSaveSlot,
         wave: wave,
@@ -294,10 +306,16 @@ function saveGame() {
             gx: f.gx,
             gy: f.gy
         })),
+        flyTraps: flyTraps.map(ft => ({
+            gx: ft.gx,
+            gy: ft.gy,
+            capturedEnemies: ft.capturedEnemies
+        })),
         gameSettings: {
             MAP_WIDTH: MAP_WIDTH,
             MAP_HEIGHT: MAP_HEIGHT,
             difficulty: difficulty,
+            flyerSpawnChance: flyerSpawnChance,
             playerZoom: playerZoom,
             editCam: editCam
         }
@@ -346,6 +364,8 @@ function loadGame() {
         burns = [];
         sandTraps = [];
         poisonClouds = [];
+        airBullets = [];
+        flyTraps = [];
         
         // Load basic game state
         wave = slotData.wave || 1;
@@ -401,17 +421,27 @@ function loadGame() {
         // Load farms
         farms = slotData.farms || [];
         
+        // Load fly traps
+        flyTraps = (slotData.flyTraps || []).map(ftData => {
+            const flyTrap = new FlyTrap(ftData.gx, ftData.gy);
+            flyTrap.capturedEnemies = ftData.capturedEnemies || 0;
+            return flyTrap;
+        });
+        
         // Load game settings
         if (slotData.gameSettings) {
             difficulty = slotData.gameSettings.difficulty || 50;
+            flyerSpawnChance = slotData.gameSettings.flyerSpawnChance || 20;
             playerZoom = slotData.gameSettings.playerZoom || 1.0;
             if (slotData.gameSettings.editCam) {
                 editCam = slotData.gameSettings.editCam;
             }
             
             document.getElementById('diffSlider').value = difficulty;
+            document.getElementById('flyerSlider').value = flyerSpawnChance;
             document.getElementById('pZoomSlider').value = playerZoom;
             document.getElementById('diffVal').innerText = difficulty;
+            document.getElementById('flyerVal').innerText = flyerSpawnChance;
             document.getElementById('pZoomVal').innerText = playerZoom;
         }
         
@@ -518,6 +548,7 @@ function initMap(resetCamera = false) {
     ];
     turrets = [];
     farms = [];
+    flyTraps = [];
     updateFlowField();
 }
 
@@ -556,7 +587,7 @@ function setBrush(t) {
     }
     
     // Also activate crate buttons
-    const crateMap = {3: 'Pierce', 4: 'Heavy', 5: 'Explosive', 12: 'Sand', 13: 'Poison'};
+    const crateMap = {3: 'Pierce', 4: 'Heavy', 5: 'Explosive', 12: 'Sand', 13: 'Poison', 15: 'Air'};
     if(crateMap[t]) {
         const crateButtons = document.querySelectorAll('.crate-buttons button');
         crateButtons.forEach(btn => {
@@ -595,6 +626,7 @@ function placeAt(tx, ty, isDelete) {
             if(isDelete) {
                 if(map[cy][cx] === TILES.TURRET) turrets = turrets.filter(t=>t.gx!==cx||t.gy!==cy);
                 if(map[cy][cx] === TILES.FARM) farms = farms.filter(f=>f.gx!==cx||f.gy!==cy);
+                if(map[cy][cx] === TILES.FLY_TRAP) flyTraps = flyTraps.filter(ft=>ft.gx!==cx||ft.gy!==cy);
                 if(map[cy][cx] !== TILES.CORE) map[cy][cx] = 0;
             } else if (map[cy][cx] === 0 && money >= COSTS[brushType]) {
                 map[cy][cx] = brushType;
@@ -604,6 +636,7 @@ function placeAt(tx, ty, isDelete) {
                     money -= COSTS[brushType];
                     if(brushType === 7) turrets.push(new Turret(cx, cy));
                     if(brushType === 8) farms.push({gx: cx, gy: cy});
+                    if(brushType === 14) flyTraps.push(new FlyTrap(cx, cy));
                 } else { 
                     map[cy][cx] = 0; 
                     updateFlowField(); 
@@ -657,6 +690,12 @@ class Player {
                 this.powerUsage = 5;
                 if(tile === TILES.CRATE_EXPLOSIVE) this.powerUsage = 1;
             }
+            // Check for air gun crate
+            else if(tile === TILES.CRATE_AIR && !this.powerup) {
+                map[ty][tx] = 0;
+                this.powerup = 'air';
+                this.powerUsage = 8; // More shots for air gun
+            }
             // Check for sand or poison traps
             else if(tile === TILES.SAND) {
                 // Sand slows player
@@ -667,7 +706,6 @@ class Player {
             else if(tile === TILES.POISON) {
                 // Poison damages player
                 core.hp -= 0.5;
-                // map[ty][tx] = 0; // Poison disappears when touched
             }
             else if(tile === TILES.HEALTH) {
                 map[ty][tx] = 0; 
@@ -694,38 +732,124 @@ class Player {
     }
     
     shoot() {
-        let count = (this.powerup === 'heavy') ? 1 : 3;
-        let spread = (this.powerup === 'heavy') ? 0 : 0.2;
-        
-        for(let i=0; i<count; i++) {
-            const angle = this.angle + (i - (count-1)/2) * spread;
-            const speed = 10;
+        if(this.powerup === 'air') {
+            // Air gun shoots special air bullets that are effective against flying enemies
+            const angle = this.angle;
+            const speed = 12;
+            airBullets.push(new AirBullet(
+                this.x, this.y,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed
+            ));
+        } else {
+            let count = (this.powerup === 'heavy') ? 1 : 3;
+            let spread = (this.powerup === 'heavy') ? 0 : 0.2;
             
-            if(this.powerup === 'sand') {
-                // Sand shot creates slow area
-                bullets.push(new Bullet(
-                    this.x, this.y,
-                    Math.cos(angle) * speed * 0.7,
-                    Math.sin(angle) * speed * 0.7,
-                    'sand'
-                ));
-            } else if(this.powerup === 'poison') {
-                // Poison shot creates poison cloud
-                bullets.push(new Bullet(
-                    this.x, this.y,
-                    Math.cos(angle) * speed,
-                    Math.sin(angle) * speed,
-                    'poison'
-                ));
-            } else {
-                // Regular bullet types
-                bullets.push(new Bullet(
-                    this.x, this.y,
-                    Math.cos(angle) * speed,
-                    Math.sin(angle) * speed,
-                    this.powerup
-                ));
+            for(let i=0; i<count; i++) {
+                const angle = this.angle + (i - (count-1)/2) * spread;
+                const speed = 10;
+                
+                if(this.powerup === 'sand') {
+                    bullets.push(new Bullet(
+                        this.x, this.y,
+                        Math.cos(angle) * speed * 0.7,
+                        Math.sin(angle) * speed * 0.7,
+                        'sand'
+                    ));
+                } else if(this.powerup === 'poison') {
+                    bullets.push(new Bullet(
+                        this.x, this.y,
+                        Math.cos(angle) * speed,
+                        Math.sin(angle) * speed,
+                        'poison'
+                    ));
+                } else {
+                    bullets.push(new Bullet(
+                        this.x, this.y,
+                        Math.cos(angle) * speed,
+                        Math.sin(angle) * speed,
+                        this.powerup
+                    ));
+                }
             }
+        }
+    }
+}
+
+class AirBullet {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.type = 'air';
+        this.damage = 60; // High damage against flying enemies
+        this.life = 100;
+        this.radius = 6;
+        this.pierceCount = 0;
+        this.maxPierce = 3; // Can pierce multiple flying enemies
+    }
+    
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        
+        if(this.life <= 0) return false;
+        
+        // Air bullets can go through walls
+        if(this.x < 0 || this.x > MAP_WIDTH * TILE_SIZE || this.y < 0 || this.y > MAP_HEIGHT * TILE_SIZE) {
+            return false;
+        }
+        
+        // Check for enemy collisions (prioritize flying enemies)
+        for(let j = enemies.length-1; j >= 0; j--) {
+            let en = enemies[j];
+            if(en.type !== 'flyer') continue; // Air bullets only hit flying enemies
+            
+            const dist = Math.hypot(this.x - en.x, this.y - en.y);
+            const hitRadius = this.radius + 8; // Flying enemies are smaller
+            
+            if(dist < hitRadius) {
+                en.health -= this.damage * (1 + this.pierceCount * 0.3); // Damage increases with pierce
+                this.pierceCount++;
+                
+                if(this.pierceCount >= this.maxPierce) {
+                    return false;
+                }
+            }
+        }
+        
+        return true;
+    }
+    
+    draw() {
+        // Draw air bullet with swirling effect
+        ctx.fillStyle = POWER_COLORS.air;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Swirling effect
+        const time = Date.now() * 0.01;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i = 0; i < 3; i++) {
+            const angle = time + (i * Math.PI * 2 / 3);
+            const swirlX = this.x + Math.cos(angle) * 4;
+            const swirlY = this.y + Math.sin(angle) * 4;
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(swirlX, swirlY);
+        }
+        ctx.stroke();
+        
+        // Show pierce count
+        if(this.pierceCount > 0) {
+            ctx.fillStyle = '#fff';
+            ctx.font = '9px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(`+${this.pierceCount}`, this.x, this.y - 12);
         }
     }
 }
@@ -784,16 +908,18 @@ class Bullet {
             return false;
         }
         
-        // Check for wall collision
+        // Check for wall collision (bullets don't hit flying enemies with walls)
         if(getCol(this.x, this.y, true)) {
             this.onWallHit();
             return false;
         }
         
-        // Check for enemy collisions
+        // Check for enemy collisions (skip flying enemies for regular bullets)
         let hitEnemy = false;
         for(let j = enemies.length-1; j >= 0; j--) {
             let en = enemies[j];
+            if(en.type === 'flyer') continue; // Regular bullets don't hit flying enemies
+            
             const dist = Math.hypot(this.x - en.x, this.y - en.y);
             const hitRadius = this.radius + (en.type === 'tank' ? 16 : 10);
             
@@ -818,7 +944,6 @@ class Bullet {
     
     onLifeEnd() {
         if(this.type === 'sand') {
-            // Create sand trap where bullet lands
             sandTraps.push({
                 x: this.x,
                 y: this.y,
@@ -827,7 +952,6 @@ class Bullet {
                 maxDuration: 180
             });
         } else if(this.type === 'poison') {
-            // Create poison cloud where bullet lands
             poisonClouds.push({
                 x: this.x,
                 y: this.y,
@@ -846,18 +970,16 @@ class Bullet {
     }
     
     onEnemyHit(enemy, distance) {
-        // Calculate damage multiplier for piercing bullets
         let damageMultiplier = 1 + (this.pierceCount * 0.5);
         let finalDamage = this.damage * damageMultiplier;
         
-        // Apply special effects
         if(this.type === 'sand') {
-            enemy.speed *= 0.5; // Slow enemy
-            enemy.slowDuration = 60; // 1 second slow
+            enemy.speed *= 0.5;
+            enemy.slowDuration = 60;
         } else if(this.type === 'poison') {
             enemy.poisoned = true;
-            enemy.poisonDuration = 90; // 1.5 seconds
-            enemy.poisonDamage = 2; // Damage per tick
+            enemy.poisonDuration = 90;
+            enemy.poisonDamage = 2;
         }
         
         enemy.health -= finalDamage;
@@ -868,13 +990,11 @@ class Bullet {
         ctx.fillStyle = POWER_COLORS[this.type] || '#fff';
         
         if(this.type === 'pierce') {
-            // Visual feedback for damage multiplier
             let size = 6 + (this.pierceCount * 2);
             ctx.beginPath();
             ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
             ctx.fill();
             
-            // Show damage multiplier
             if(this.pierceCount > 0) {
                 ctx.fillStyle = '#fff';
                 ctx.font = '10px Courier New';
@@ -884,7 +1004,6 @@ class Bullet {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
             ctx.fill();
-            // Sand texture
             ctx.fillStyle = '#da8';
             for(let i = 0; i < 3; i++) {
                 const offset = (i - 1) * 2;
@@ -894,7 +1013,6 @@ class Bullet {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
             ctx.fill();
-            // Poison bubbles
             ctx.fillStyle = '#0f0';
             ctx.beginPath();
             ctx.arc(this.x - 2, this.y - 2, 2, 0, Math.PI * 2);
@@ -908,13 +1026,102 @@ class Bullet {
     }
 }
 
+class FlyTrap {
+    constructor(gx, gy) {
+        this.gx = gx;
+        this.gy = gy;
+        this.capturedEnemies = 0;
+        this.maxCapacity = 3;
+        this.cooldown = 0;
+        this.range = 150; // Range to capture flying enemies
+    }
+    
+    update() {
+        if(this.cooldown > 0) {
+            this.cooldown--;
+            return;
+        }
+        
+        // Check for flying enemies in range
+        for(let i = enemies.length-1; i >= 0; i--) {
+            let en = enemies[i];
+            if(en.type !== 'flyer') continue;
+            
+            const trapX = this.gx * TILE_SIZE + 20;
+            const trapY = this.gy * TILE_SIZE + 20;
+            const dist = Math.hypot(en.x - trapX, en.y - trapY);
+            
+            if(dist < this.range) {
+                // Damage the flying enemy
+                const damage = 10; // Damage per tick
+                en.health -= damage;
+                
+                // Cooldown after damaging
+                this.cooldown = 15 / getProximityBoost(this.gx, this.gy, TILES.UP_SPEED);;
+                break;
+            }
+        }
+    }
+    
+    draw() {
+        const x = this.gx * TILE_SIZE;
+        const y = this.gy * TILE_SIZE;
+        const centerX = x + TILE_SIZE/2;
+        const centerY = y + TILE_SIZE/2;
+        
+        // Draw trap base
+        ctx.fillStyle = COLORS[14];
+        ctx.fillRect(x, y, TILE_SIZE-1, TILE_SIZE-1);
+        
+        // Draw trap pattern
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 5, y + 5);
+        ctx.lineTo(x + TILE_SIZE - 5, y + TILE_SIZE - 5);
+        ctx.moveTo(x + TILE_SIZE - 5, y + 5);
+        ctx.lineTo(x + 5, y + TILE_SIZE - 5);
+        ctx.stroke();
+        
+        // Draw captured enemies indicator
+        if(this.capturedEnemies > 0) {
+            ctx.fillStyle = '#f0f';
+            ctx.font = '12px Courier New';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${this.capturedEnemies}`, centerX, centerY);
+        }
+        
+        // Draw range indicator when active
+        if(this.cooldown <= 0 && this.capturedEnemies < this.maxCapacity) {
+            ctx.strokeStyle = 'rgba(255, 0, 255, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, this.range, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+}
+
 class Enemy {
     constructor(x, y, type) { 
         this.x = x; this.y = y; this.type = type;
-        this.health = type === 'tank' ? 200+(wave*wave*100) : 40+(wave*wave*10);
+        
+        // Different stats for flying enemies
+        if(type === 'flyer') {
+            this.health = 30 + (wave * wave * 5);
+            this.speed = 2.5 + (wave * 0.2);
+            this.baseSpeed = this.speed;
+            this.altitude = 50 + Math.random() * 50; // Flying height
+            this.flapPhase = Math.random() * Math.PI * 2;
+        } else {
+            this.health = type === 'tank' ? 200+(wave*wave*100) : 40+(wave*wave*10);
+            this.speed = type === 'scout' ? 3.5 : (type === 'tank' ? 1.2 + 0.2*wave : 2.0*wave);
+            this.baseSpeed = this.speed;
+            this.altitude = 0; // Ground enemies
+        }
+        
         this.maxHealth = this.health;
-        this.speed = type === 'scout' ? 3.5 : (type === 'tank' ? 1.2 + 0.2*wave : 2.0*wave);
-        this.baseSpeed = this.speed;
         this.damageDealt = 0;
         this.slowDuration = 0;
         this.poisoned = false;
@@ -960,13 +1167,26 @@ class Enemy {
             }
         });
         
-        // Check for sand traps
-        sandTraps.forEach(sand => {
-            if(Math.hypot(this.x - sand.x, this.y - sand.y) < sand.radius) {
-                this.speed = this.baseSpeed * 0.3; // Extra slow in sand trap
-                if(!this.slowDuration) this.slowDuration = 30; // Refresh slow
+        // Check for sand traps (only affect ground enemies)
+        if(this.type !== 'flyer') {
+            sandTraps.forEach(sand => {
+                if(Math.hypot(this.x - sand.x, this.y - sand.y) < sand.radius) {
+                    this.speed = this.baseSpeed * 0.3;
+                    if(!this.slowDuration) this.slowDuration = 30;
+                }
+            });
+            
+            // Check for map poison tiles
+            let tx = Math.floor(this.x/TILE_SIZE), ty = Math.floor(this.y/TILE_SIZE);
+            if(tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
+                if(map[ty][tx] === TILES.POISON) {
+                    this.health -= 5;
+                } else if(map[ty][tx] === TILES.SAND) {
+                    this.speed = this.baseSpeed * 0.4;
+                    if(!this.slowDuration) this.slowDuration = 30;
+                }
             }
-        });
+        }
         
         // Check for poison clouds
         poisonClouds.forEach(poison => {
@@ -980,18 +1200,6 @@ class Enemy {
             }
         });
         
-        // Check for map poison tiles
-        let tx = Math.floor(this.x/TILE_SIZE), ty = Math.floor(this.y/TILE_SIZE);
-        if(tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
-            if(map[ty][tx] === TILES.POISON) {
-                this.health -= 5;
-                // map[ty][tx] = 0; // Poison disappears
-            } else if(map[ty][tx] === TILES.SAND) {
-                this.speed = this.baseSpeed * 0.4;
-                if(!this.slowDuration) this.slowDuration = 30;
-            }
-        }
-        
         let targetX, targetY;
         
         // AI: Choose target based on targetType
@@ -1003,7 +1211,6 @@ class Enemy {
                 targetY = core.y * TILE_SIZE + 20;
                 break;
             case 'player':
-                // Find nearest player
                 let closestDist = Infinity;
                 players.forEach(p => {
                     let dist = Math.hypot(this.x - p.x, this.y - p.y);
@@ -1015,7 +1222,6 @@ class Enemy {
                 });
                 break;
             case 'turret':
-                // Find nearest turret
                 let closestTurret = null;
                 turrets.forEach(t => {
                     let dist = Math.hypot(this.x - (t.gx * TILE_SIZE + 20), this.y - (t.gy * TILE_SIZE + 20));
@@ -1035,31 +1241,43 @@ class Enemy {
                 break;
         }
         
-        // Pathfinding
-        tx = Math.floor(this.x/TILE_SIZE);
-        ty = Math.floor(this.y/TILE_SIZE);
-        let bestD = flowField[ty] ? flowField[ty][tx] : Infinity;
-        let moveX = 0, moveY = 0;
-        
-        if(Math.random() < 0.05) {
-            moveX = (Math.random() - 0.5) * 2;
-            moveY = (Math.random() - 0.5) * 2;
+        // Movement logic - flying enemies ignore walls
+        if(this.type === 'flyer') {
+            // Fly directly toward target, ignoring obstacles
+            const angle = Math.atan2(targetY - this.y, targetX - this.x);
+            this.x += Math.cos(angle) * this.speed;
+            this.y += Math.sin(angle) * this.speed;
+            
+            // Add slight hovering/flapping motion
+            this.flapPhase += 0.1;
+            const hoverY = Math.sin(this.flapPhase) * 3;
         } else {
-            for(let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
-                let nx = tx+dx, ny = ty+dy;
-                if(flowField[ny] && flowField[ny][nx] < bestD) { 
-                    bestD = flowField[ny][nx]; 
-                    moveX = dx; 
-                    moveY = dy; 
+            // Ground enemy pathfinding
+            let tx = Math.floor(this.x/TILE_SIZE);
+            let ty = Math.floor(this.y/TILE_SIZE);
+            let bestD = flowField[ty] ? flowField[ty][tx] : Infinity;
+            let moveX = 0, moveY = 0;
+            
+            if(Math.random() < 0.05) {
+                moveX = (Math.random() - 0.5) * 2;
+                moveY = (Math.random() - 0.5) * 2;
+            } else {
+                for(let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+                    let nx = tx+dx, ny = ty+dy;
+                    if(flowField[ny] && flowField[ny][nx] < bestD) { 
+                        bestD = flowField[ny][nx]; 
+                        moveX = dx; 
+                        moveY = dy; 
+                    }
                 }
             }
+            
+            this.x += moveX * this.speed;
+            this.y += moveY * this.speed;
         }
         
-        this.x += moveX * this.speed;
-        this.y += moveY * this.speed;
-        
         // Deal damage to target
-        let damage = this.type === 'tank' ? 1.5 : 0.4;
+        let damage = this.type === 'tank' ? 1.5 : (this.type === 'flyer' ? 0.3 : 0.4);
         if(Math.hypot(this.x - targetX, this.y - targetY) < 35) {
             if(this.targetType === 'core') {
                 core.hp -= damage;
@@ -1080,50 +1298,103 @@ class Enemy {
     }
     
     draw() {
-        // Health bar
         const healthPercent = this.health / this.maxHealth;
         
-        // Body color based on status
-        let bodyColor = this.type === 'tank' ? '#f00' : '#f0f';
-        if(this.poisoned) bodyColor = '#0f0';
-        if(this.slowDuration > 0) bodyColor = '#da8';
-        
-        ctx.fillStyle = bodyColor;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.type === 'tank' ? 16 : 10, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Status effect indicators
-        if(this.poisoned) {
-            ctx.strokeStyle = '#0f0';
-            ctx.lineWidth = 2;
+        if(this.type === 'flyer') {
+            // Draw flying enemy
+            const time = Date.now() * 0.001;
+            const flap = Math.sin(time * 10 + this.flapPhase) * 3;
+            
+            // Draw wings
+            ctx.fillStyle = '#a0f';
             ctx.beginPath();
-            ctx.arc(this.x, this.y, (this.type === 'tank' ? 18 : 12), 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        
-        if(this.slowDuration > 0) {
-            ctx.strokeStyle = '#da8';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
+            // Left wing
+            ctx.moveTo(this.x - 12, this.y + flap);
+            ctx.lineTo(this.x - 25, this.y - 5 + flap);
+            ctx.lineTo(this.x - 12, this.y - 10 + flap);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Right wing
             ctx.beginPath();
-            ctx.arc(this.x, this.y, (this.type === 'tank' ? 20 : 14), 0, Math.PI * 2);
+            ctx.moveTo(this.x + 12, this.y + flap);
+            ctx.lineTo(this.x + 25, this.y - 5 + flap);
+            ctx.lineTo(this.x + 12, this.y - 10 + flap);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw body
+            ctx.fillStyle = this.poisoned ? '#0f0' : '#f0f';
+            ctx.beginPath();
+            ctx.ellipse(this.x, this.y, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw eyes
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x - 3, this.y - 2, 2, 0, Math.PI * 2);
+            ctx.arc(this.x + 3, this.y - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw altitude indicator
+            ctx.strokeStyle = '#f0f';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x, this.y - this.altitude);
             ctx.stroke();
             ctx.setLineDash([]);
+            
+        } else {
+            // Draw ground enemy
+            let bodyColor = this.type === 'tank' ? '#f00' : '#f0f';
+            if(this.poisoned) bodyColor = '#0f0';
+            if(this.slowDuration > 0) bodyColor = '#da8';
+            
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.type === 'tank' ? 16 : 10, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if(this.poisoned) {
+                ctx.strokeStyle = '#0f0';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, (this.type === 'tank' ? 18 : 12), 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            if(this.slowDuration > 0) {
+                ctx.strokeStyle = '#da8';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, (this.type === 'tank' ? 20 : 14), 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
         }
         
         // Health bar above enemy
-        ctx.fillStyle = '#f00';
-        ctx.fillRect(this.x - 15, this.y - 25, 30, 4);
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(this.x - 15, this.y - 25, 30 * healthPercent, 4);
+        const barWidth = this.type === 'flyer' ? 20 : 30;
+        const barHeight = 3;
+        const barX = this.x - barWidth/2;
+        const barY = this.y - (this.type === 'flyer' ? 30 : 25);
         
-        // Target indicator
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, 12, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+        
+        // Target indicator for ground enemies only
+        if(this.type !== 'flyer') {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 12, 0, Math.PI * 2);
+            ctx.stroke();
+        }
     }
 }
 
@@ -1145,7 +1416,10 @@ class Turret {
         let rangeBoost = getProximityBoost(this.gx, this.gy, TILES.UP_RANGE);
         let range = 300 + rangeBoost * 300;
         
+        // Turrets only target ground enemies
         let target = enemies.reduce((best, en) => {
+            if(en.type === 'flyer') return best; // Skip flying enemies
+            
             let dist = Math.hypot(en.x - posX, en.y - posY);
             if(dist < range) {
                 let score = en.damageDealt * 2;
@@ -1221,7 +1495,15 @@ function startWave() {
         else { rx=Math.random()*MAP_WIDTH; ry=MAP_HEIGHT-1; }
         
         let type = Math.random();
-        let enemyType = type < 0.1 ? 'scout' : (type < 0.3 ? 'tank' : 'norm');
+        let enemyType;
+        
+        // Chance to spawn flying enemy
+        if(Math.random() * 100 < flyerSpawnChance) {
+            enemyType = 'flyer';
+        } else {
+            enemyType = type < 0.1 ? 'scout' : (type < 0.3 ? 'tank' : 'norm');
+        }
+        
         enemies.push(new Enemy(rx*TILE_SIZE+20, ry*TILE_SIZE+20, enemyType));
     }
 }
@@ -1240,19 +1522,21 @@ function update() {
     // Update all entities
     players.forEach(p=>p.update()); 
     turrets.forEach(t=>t.update());
+    flyTraps.forEach(ft=>ft.update());
     
-    // Farm income
-    // if(Math.random()<0.01) { 
-        // money += farms.length * 10; 
-        // document.getElementById('moneyDisplay').innerText = money; 
-    // }
+    // Update air bullets
+    for(let i = airBullets.length-1; i >= 0; i--) {
+        if(!airBullets[i].update()) {
+            airBullets.splice(i,1);
+        }
+    }
     
     // Update enemies and remove dead ones
     enemies.forEach((en, i) => { 
         en.update(); 
         if(en.health <= 0) { 
             enemies.splice(i,1); 
-            // money += en.type === 'tank' ? 50 : 15; 
+            // money += en.type === 'tank' ? 50 : (en.type === 'flyer' ? 30 : 15); 
             document.getElementById('moneyDisplay').innerText = money; 
         }
     });
@@ -1356,6 +1640,15 @@ function drawWorld() {
                 ctx.fillText(symbol, x*TILE_SIZE + TILE_SIZE/2, y*TILE_SIZE + TILE_SIZE/2);
             }
             
+            // Draw air gun crate symbol
+            if(tile === TILES.CRATE_AIR) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px Courier New';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('A', x*TILE_SIZE + TILE_SIZE/2, y*TILE_SIZE + TILE_SIZE/2);
+            }
+            
             // Draw sand pattern
             if(tile === TILES.SAND) {
                 ctx.fillStyle = '#da8';
@@ -1389,6 +1682,9 @@ function drawWorld() {
         }
     }
     
+    // Draw fly traps
+    flyTraps.forEach(ft => ft.draw());
+    
     // Draw sand traps
     sandTraps.forEach(sand => {
         const alpha = sand.duration / sand.maxDuration;
@@ -1397,7 +1693,6 @@ function drawWorld() {
         ctx.arc(sand.x, sand.y, sand.radius, 0, Math.PI * 2);
         ctx.fill();
         
-        // Sand particles
         ctx.fillStyle = `rgba(218, 168, 136, ${alpha})`;
         for(let i = 0; i < 5; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -1419,7 +1714,6 @@ function drawWorld() {
         ctx.arc(poison.x, poison.y, poison.radius, 0, Math.PI * 2);
         ctx.fill();
         
-        // Poison bubbles
         ctx.fillStyle = `rgba(0, 255, 0, ${alpha})`;
         for(let i = 0; i < 3; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -1442,7 +1736,6 @@ function drawWorld() {
         ctx.arc(burn.x, burn.y, burn.radius, 0, Math.PI * 2);
         ctx.fill();
         
-        // Fire particles
         for(let i = 0; i < 3; i++) {
             const angle = Math.random() * Math.PI * 2;
             const dist = Math.random() * burn.radius;
@@ -1484,6 +1777,9 @@ function drawWorld() {
     
     // Draw bullets
     bullets.forEach(b => b.draw());
+    
+    // Draw air bullets
+    airBullets.forEach(b => b.draw());
     
     // Draw explosions
     explosions.forEach(ex => { 
