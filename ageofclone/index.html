@@ -2,67 +2,67 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Empire Clone - Authoritative Sync</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Empire Clone - Pro Sync</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --p: #ff9800; --bg: #1a1a1a; --glass: rgba(25, 25, 25, 0.95); }
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        :root { --p: #ff9800; --bg: #1a1a1a; --glass: rgba(20, 20, 20, 0.96); }
+        body { margin: 0; background: #000; color: white; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
 
-        /* Full Screen Setup */
-        #setup { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
+        /* Setup / Lobby */
+        #setup { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; padding: 20px; text-align: center; }
         
-        /* Fixed Top Bar - Mobile Optimized */
+        /* Fixed Top Bar - Using Grid for perfect spacing */
         #top-bar { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 60px;
+            position: absolute; top: 0; left: 0; width: 100%; height: 70px;
             background: var(--glass); border-bottom: 2px solid #444;
             display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center;
-            z-index: 1000; pointer-events: all; text-align: center;
+            z-index: 1000; pointer-events: all;
+            padding-top: env(safe-area-inset-top); /* Mobile Notch support */
         }
-        .res-item { font-size: 16px; font-weight: bold; }
+        .res-item { font-size: 18px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 
-        /* Left Sidebar Tools */
+        /* Toolbar */
         #toolbar {
-            position: absolute; left: 12px; top: 80px; 
-            display: flex; flex-direction: column; gap: 12px;
+            position: absolute; left: 15px; top: 100px; 
+            display: flex; flex-direction: column; gap: 15px;
             z-index: 1000; pointer-events: all;
         }
         .tool-btn {
-            width: 55px; height: 55px; background: var(--glass); border: 2px solid #555;
-            color: white; border-radius: 12px; font-size: 24px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
+            width: 60px; height: 60px; background: var(--glass); border: 2px solid #666;
+            color: white; border-radius: 15px; font-size: 28px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        .tool-btn.active { border-color: var(--p); background: #3d2b00; box-shadow: 0 0 10px var(--p); }
+        .tool-btn.active { border-color: var(--p); background: #3d2b00; transform: scale(1.1); }
 
-        /* Bottom Action Bar */
+        /* Action Bar */
         #action-bar {
-            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 8px; pointer-events: all; z-index: 1000; width: 95%; justify-content: center;
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; pointer-events: all; z-index: 1000; width: 90%; justify-content: center;
         }
         .spawn-btn {
-            background: var(--glass); border: 1px solid #666; padding: 10px;
-            border-radius: 8px; flex: 1; max-width: 110px; text-align: center; font-size: 11px;
+            background: var(--glass); border: 1px solid #555; padding: 12px;
+            border-radius: 12px; flex: 1; max-width: 120px; text-align: center; font-size: 11px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
         }
-        .spawn-btn b { display: block; color: var(--p); font-size: 13px; margin-bottom: 2px; }
+        .spawn-btn b { display: block; color: var(--p); font-size: 14px; margin-bottom: 3px; }
 
         .hidden { display: none !important; }
-        button:active { transform: scale(0.95); }
+        input { padding: 15px; border-radius: 10px; border: 1px solid #444; background: #000; color: white; width: 240px; margin: 10px; font-size: 16px; }
     </style>
 </head>
 <body>
 
 <div id="setup">
-    <h1 style="color:var(--p)">EMPIRE P2P</h1>
-    <div id="lobby-ui">
-        <p>Your Game ID: <b id="my-id">...</b></p>
-        <button onclick="copyLink()" style="padding:10px; margin-bottom:10px;">🔗 Copy Invite Link</button><br>
-        <input type="text" id="join-id" placeholder="Paste ID here" style="padding:12px; width:200px; border-radius:8px;"><br>
-        <button onclick="connect()" style="padding:12px 30px; margin-top:10px; background:var(--p); border:none; border-radius:8px; font-weight:bold;">Join Friend</button>
-        <div id="host-tools" class="hidden">
-            <hr style="width:100%; border:0; border-top:1px solid #444; margin:20px 0;">
-            <button onclick="startGame()" style="background:#2e7d32; color:white; padding: 20px 50px; border-radius: 12px; font-size:18px; border:none; font-weight:bold;">START MISSION</button>
-        </div>
+    <h1 style="color:var(--p); font-size: 2.5rem;">EMPIRE PRO</h1>
+    <p>Your ID: <b id="my-id">...</b></p>
+    <button onclick="copyLink()" style="padding:15px 30px; border-radius:10px; border:1px solid #666; background:#333; color:#fff;">Copy Invite Link</button>
+    <br>
+    <input type="text" id="join-id" placeholder="Paste friend's ID">
+    <button onclick="connect()" style="padding:15px 40px; background:var(--p); border:none; border-radius:10px; font-weight:bold; font-size:1.1rem;">Join Mission</button>
+    <div id="host-tools" class="hidden">
+        <br><button onclick="startGame()" style="background:#2e7d32; color:white; padding: 20px 60px; border-radius: 15px; font-size:1.2rem; border:none; font-weight:bold; cursor:pointer;">START GAME</button>
     </div>
 </div>
 
@@ -94,19 +94,12 @@ const TILE = 48, MAP_SIZE = 50;
 let peer, conn, myId = "";
 let isHost = false;
 let resources = { wood: 200, gold: 100 };
-let cam = { x: 0, y: 0, z: 0.75 };
+let cam = { x: 0, y: 0, z: 0.8 };
 let currentTool = 'pan'; 
 let selection = { start: null, current: null, ids: [] };
 let gameState = { units: [], map: [], buildings: [] };
 
-// --- TOOL SETTINGS ---
-function setTool(tool) {
-    currentTool = tool;
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('btn-' + tool).classList.add('active');
-}
-
-// --- NETWORK CORE ---
+// --- NETWORKING (Optimized Sync) ---
 peer = new Peer();
 peer.on('open', id => {
     myId = id; document.getElementById('my-id').innerText = id;
@@ -122,38 +115,53 @@ peer.on('connection', c => {
 
 function connect() {
     conn = peer.connect(document.getElementById('join-id').value);
-    isHost = false; 
-    setupConn();
+    isHost = false; setupConn();
 }
 
 function setupConn() {
     conn.on('data', data => {
         if(data.type === 'SYNC') {
-            // Client simply receives the Host's truth
-            gameState.units = data.units;
+            // Update local state with Host data
+            data.units.forEach(srvUnit => {
+                let local = gameState.units.find(u => u.id === srvUnit.id);
+                if (local) {
+                    // Don't snap! Just update the target positions.
+                    local.srvX = srvUnit.x; 
+                    local.srvY = srvUnit.y;
+                    local.cargo = srvUnit.cargo;
+                } else {
+                    // New unit spawned, add it
+                    srvUnit.srvX = srvUnit.x; 
+                    srvUnit.srvY = srvUnit.y;
+                    gameState.units.push(srvUnit);
+                }
+            });
+            // Remove dead units
+            gameState.units = gameState.units.filter(u => data.units.some(su => su.id === u.id));
             gameState.buildings = data.buildings;
             if(!isHost) resources = data.res[myId] || resources;
         }
         if(data.type === 'START') { gameState.map = data.map; initGame(); }
-        if(data.type === 'CMD') handleCommand(data); // Host receives command
+        if(data.type === 'CMD') handleCommand(data);
         if(data.type === 'SPAWN_REQ') spawnAt(data.sender, data.unitType);
     });
 }
 
-// --- GAMEPLAY ENGINE ---
+// --- TOOLS ---
+function setTool(tool) {
+    currentTool = tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-' + tool).classList.add('active');
+}
+
+// --- CORE GAME LOOP ---
 function startGame() {
-    // Generate Map
     gameState.map = Array.from({length: MAP_SIZE}, () => Array.from({length: MAP_SIZE}, () => 
         Math.random() < 0.1 ? 'TREE' : (Math.random() < 0.03 ? 'GOLD' : 'DIRT')));
-    
-    // Create Bases
     createBuilding(myId, 'base', 5*TILE, 5*TILE);
     createBuilding(conn.peer, 'base', (MAP_SIZE-6)*TILE, (MAP_SIZE-6)*TILE);
-    
-    // Initial Units
     spawnAt(myId, 'worker', 6*TILE, 6*TILE);
     spawnAt(conn.peer, 'worker', (MAP_SIZE-7)*TILE, (MAP_SIZE-7)*TILE);
-
     conn.send({ type: 'START', map: gameState.map });
     initGame();
 }
@@ -161,38 +169,41 @@ function startGame() {
 function initGame() {
     document.getElementById('setup').classList.add('hidden');
     ['top-bar', 'toolbar', 'action-bar'].forEach(id => document.getElementById(id).classList.remove('hidden'));
-    
-    // Position camera on your base
-    const myBase = gameState.buildings.find(b => b.owner === myId);
-    if(myBase) {
-        cam.x = myBase.x - window.innerWidth/2;
-        cam.y = myBase.y - window.innerHeight/2;
-    }
+    const b = gameState.buildings.find(b => b.owner === myId);
+    if(b) { cam.x = b.x - window.innerWidth/2; cam.y = b.y - window.innerHeight/2; }
     requestAnimationFrame(loop);
 }
 
-function loop() {
+let lastSyncTime = 0;
+function loop(now) {
+    // 1. HOST LOGIC: Calculate Movement
     if (isHost) {
-        // ONLY the Host moves units
         gameState.units.forEach(u => {
             const dx = u.tx - u.x, dy = u.ty - u.y;
             const dist = Math.hypot(dx, dy);
-            if(dist > 2) {
-                u.x += (dx/dist)*4;
-                u.y += (dy/dist)*4;
-            } else if (u.type === 'worker') {
-                updateWorkerGathering(u);
-            }
+            if(dist > 2) { u.x += (dx/dist)*4; u.y += (dy/dist)*4; }
+            else if (u.type === 'worker') updateWorkerGathering(u);
         });
-        
-        // Broadcast the new positions to the Client
-        if(conn) conn.send({ 
-            type: 'SYNC', 
-            units: gameState.units, 
-            buildings: gameState.buildings,
-            res: { [myId]: resources, [conn.peer]: {wood: 100, gold: 50} } // Simple res sync logic
-        });
+
+        // Throttle Network Sync (every 50ms) to avoid saturating mobile data
+        if (now - lastSyncTime > 50) {
+            if(conn) conn.send({ 
+                type: 'SYNC', units: gameState.units, buildings: gameState.buildings,
+                res: { [myId]: resources, [conn.peer]: {wood: 100, gold: 50} }
+            });
+            lastSyncTime = now;
+        }
     }
+
+    // 2. CLIENT LOGIC: Interpolation (Lerp)
+    // This makes the movement smooth regardless of net lag
+    gameState.units.forEach(u => {
+        if (!isHost) {
+            // "Rubber Band" effect: Move local position 15% towards the server position every frame
+            u.x += (u.srvX - u.x) * 0.15;
+            u.y += (u.srvY - u.y) * 0.15;
+        }
+    });
 
     draw();
     requestAnimationFrame(loop);
@@ -204,7 +215,6 @@ function updateWorkerGathering(u) {
     if (!u.cargo && (tile === 'TREE' || tile === 'GOLD')) {
         u.cargo = tile; u.lx = u.x; u.ly = u.y; u.tx = base.x; u.ty = base.y;
     } else if (u.cargo && base && Math.hypot(u.x-base.x, u.y-base.y) < 40) {
-        // Increment resources on Host
         if(u.owner === myId) resources[u.cargo === 'TREE' ? 'wood' : 'gold'] += 10;
         u.cargo = null; u.tx = u.lx; u.ty = u.ly;
     }
@@ -213,60 +223,54 @@ function updateWorkerGathering(u) {
 // --- RENDERER ---
 function draw() {
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-    ctx.clearRect(0,0,canvas.width, canvas.height);
-    
     ctx.save();
-    // Apply Camera
     ctx.translate(canvas.width/2, canvas.height/2);
     ctx.scale(cam.z, cam.z);
     ctx.translate(-cam.x - canvas.width/2, -cam.y - canvas.height/2);
 
-    // Draw Map
+    // Map
     for(let y=0; y<MAP_SIZE; y++) {
         for(let x=0; x<MAP_SIZE; x++) {
             const t = gameState.map[y][x];
-            ctx.fillStyle = t === 'TREE' ? '#1b5e20' : (t === 'GOLD' ? '#ffd600' : '#3e2723');
+            ctx.fillStyle = t === 'TREE' ? '#1b5e20' : (t === 'GOLD' ? '#ffd600' : '#2b1d0e');
             ctx.fillRect(x*TILE, y*TILE, TILE, TILE);
         }
     }
 
-    // Draw Buildings
+    // Buildings
     gameState.buildings.forEach(b => {
         ctx.fillStyle = b.owner === myId ? '#2196f3' : '#f44336';
         ctx.fillRect(b.x-40, b.y-40, 80, 80);
-        ctx.fillStyle = 'white'; ctx.textAlign = 'center';
-        ctx.fillText(b.type.toUpperCase(), b.x, b.y);
     });
 
-    // Draw Units
+    // Units
     gameState.units.forEach(u => {
         const isSel = selection.ids.includes(u.id);
         ctx.beginPath();
         ctx.fillStyle = u.owner === myId ? (isSel ? '#00e5ff' : '#fff') : '#f44336';
-        ctx.arc(u.x, u.y, 16, 0, Math.PI*2);
+        ctx.arc(u.x, u.y, 18, 0, Math.PI*2);
         ctx.fill();
-        if(isSel) { ctx.strokeStyle = 'white'; ctx.lineWidth = 3; ctx.stroke(); }
-        
+        if(isSel) { ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke(); }
         if(u.cargo) {
             ctx.fillStyle = u.cargo === 'TREE' ? '#4caf50' : '#ffeb3b';
-            ctx.fillRect(u.x-6, u.y-28, 12, 12);
+            ctx.fillRect(u.x-8, u.y-35, 16, 16);
         }
     });
 
-    // Selection Box (Screen Space)
     ctx.restore();
+    
+    // UI HUD
     if (currentTool === 'select' && selection.start && selection.current) {
         ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2;
         ctx.strokeRect(selection.start.x, selection.start.y, selection.current.x-selection.start.x, selection.current.y-selection.start.y);
     }
 
-    // UI Updates
     document.getElementById('res-wood').innerText = resources.wood;
     document.getElementById('res-gold').innerText = resources.gold;
     document.getElementById('res-pop').innerText = gameState.units.filter(u=>u.owner===myId).length;
 }
 
-// --- CONTROLS ---
+// --- INPUTS ---
 let isDown = false;
 canvas.addEventListener('pointerdown', e => {
     isDown = true;
@@ -278,34 +282,24 @@ window.addEventListener('pointermove', e => {
     if(!isDown) return;
     const dx = e.clientX - selection.current.x;
     const dy = e.clientY - selection.current.y;
-    
-    if (currentTool === 'pan') {
-        cam.x -= dx / cam.z;
-        cam.y -= dy / cam.z;
-    }
+    if (currentTool === 'pan') { cam.x -= dx / cam.z; cam.y -= dy / cam.z; }
     selection.current = {x: e.clientX, y: e.clientY};
 });
 
 window.addEventListener('pointerup', e => {
     if(!isDown) return;
     isDown = false;
-
     const s = screenToWorld(selection.start.x, selection.start.y);
     const c = screenToWorld(selection.current.x, selection.current.y);
 
     if (currentTool === 'select') {
         const xMin = Math.min(s.x, c.x), xMax = Math.max(s.x, c.x);
         const yMin = Math.min(s.y, c.y), yMax = Math.max(s.y, c.y);
-        
-        // Selection works for both Host and Client
-        selection.ids = gameState.units.filter(u => 
-            u.owner === myId && u.x > xMin && u.x < xMax && u.y > yMin && u.y < yMax
-        ).map(u => u.id);
-        
+        selection.ids = gameState.units.filter(u => u.owner === myId && u.x > xMin && u.x < xMax && u.y > yMin && u.y < yMax).map(u => u.id);
         if(selection.ids.length > 0) setTool('action'); 
     } 
     else if (currentTool === 'action') {
-        commandUnits(c.x, c.y); // Use current world pos
+        commandUnits(c.x, c.y);
     }
     selection.start = selection.current = null;
 });
@@ -324,7 +318,6 @@ function commandUnits(tx, ty) {
 }
 
 function handleCommand(data) {
-    // Only the Host modifies the actual unit data
     gameState.units.filter(u => data.ids.includes(u.id)).forEach(u => { 
         u.tx = data.tx; u.ty = data.ty; u.cargo = null; 
     });
@@ -342,11 +335,8 @@ function spawn(type) {
 function spawnAt(owner, type, x, y) {
     const b = gameState.buildings.find(b => b.owner === owner);
     if (!b) return;
-    if(type === 'barracks') {
-        createBuilding(owner, 'barracks', b.x + TILE*2, b.y);
-    } else {
-        gameState.units.push({ id: Math.random(), owner, type, x: x||b.x, y: y||b.y, tx: x||b.x, ty: y||b.y, cargo: null });
-    }
+    if(type === 'barracks') createBuilding(owner, 'barracks', b.x + TILE*2, b.y);
+    else gameState.units.push({ id: Math.random(), owner, type, x: x||b.x, y: y||b.y, tx: x||b.x, ty: y||b.y, srvX: x||b.x, srvY: y||b.y, cargo: null });
 }
 
 function createBuilding(owner, type, x, y) {
@@ -354,8 +344,7 @@ function createBuilding(owner, type, x, y) {
 }
 
 function copyLink() {
-    const link = window.location.origin + window.location.pathname + "?join=" + myId;
-    navigator.clipboard.writeText(link);
+    navigator.clipboard.writeText(window.location.origin + window.location.pathname + "?join=" + myId);
     alert("Invite Link Copied!");
 }
 </script>
