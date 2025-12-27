@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Empire Pro - Multi-Sync</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --p: #ff9800; --bg: #1a1a1a; --glass: rgba(20, 20, 20, 0.98); }
+        body { margin: 0; background: #000; color: white; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; }
+        canvas { display: block; }
+
+        #setup { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; padding: 20px; text-align: center; }
+        
+        #top-bar { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 70px;
+            background: var(--glass); border-bottom: 2px solid #444;
+            display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center;
+            z-index: 1000; pointer-events: all; padding-top: env(safe-area-inset-top);
+        }
+        .res-item { font-size: 18px; font-weight: 800; text-align: center; }
+
+        #toolbar {
+            position: absolute; left: 15px; top: 100px; 
+            display: flex; flex-direction: column; gap: 15px; z-index: 1000; pointer-events: all;
+        }
+        .tool-btn {
+            width: 60px; height: 60px; background: var(--glass); border: 2px solid #666;
+            color: white; border-radius: 15px; font-size: 28px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tool-btn.active { border-color: var(--p); background: #3d2b00; transform: scale(1.1); }
+
+        #action-bar {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; pointer-events: all; z-index: 1000; width: 90%; justify-content: center;
+        }
+        .spawn-btn {
+            background: var(--glass); border: 1px solid #555; padding: 12px;
+            border-radius: 12px; flex: 1; max-width: 120px; text-align: center; font-size: 11px;
+        }
+        .spawn-btn b { display: block; color: var(--p); font-size: 14px; }
+
+        .hidden { display: none !important; }
+        button { cursor: pointer; }
+        input { padding: 15px; border-radius: 10px; border: 1px solid #444; background: #000; color: white; width: 240px; margin: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <h1 style="color:var(--p)">EMPIRE PRO</h1>
+    <p id="net-status">Initializing Network...</p>
+    <div id="lobby-ui">
+        <p>Your ID: <b id="my-id">...</b></p>
+        <button onclick="copyLink()">Copy Invite Link</button><br>
+        <input type="text" id="join-id" placeholder="Paste friend's ID">
+        <button onclick="connectToHost()" style="background:var(--p); border:none; padding:15px 30px; border-radius:10px; font-weight:bold;">Join Mission</button>
+        <div id="host-tools" class="hidden">
+            <p style="color:#4caf50">Players Connected: <span id="player-count">1</span></p>
+            <button onclick="broadcastStart()" style="background:#2e7d32; color:white; padding: 20px 60px; border-radius: 15px; font-size:1.2rem; border:none; font-weight:bold;">START GAME</button>
+        </div>
+    </div>
+</div>
+
+<div id="top-bar" class="hidden">
+    <div class="res-item">🪵 <span id="res-wood">0</span></div>
+    <div class="res-item">💰 <span id="res-gold">0</span></div>
+    <div class="res-item">⚔️ <span id="res-pop">0</span></div>
+</div>
+
+<div id="toolbar" class="hidden">
+    <button class="tool-btn active" id="btn-pan" onclick="setTool('pan')">🖐️</button>
+    <button class="tool-btn" id="btn-select" onclick="setTool('select')">🖱️</button>
+    <button class="tool-btn" id="btn-action" onclick="setTool('action')">🎯</button>
+</div>
+
+<div id="action-bar" class="hidden">
+    <div class="spawn-btn" onclick="spawn('worker')"><b>WORKER</b>50W</div>
+    <div class="spawn-btn" onclick="spawn('barracks')"><b>BARRACKS</b>100W</div>
+    <div class="spawn-btn" onclick="spawn('soldier')"><b>SOLDIER</b>50W 20G</div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const TILE = 48, MAP_SIZE = 50;
+
+let peer, connections = [], myId = "";
+let isHost = false;
+let resources = { wood: 200, gold: 100 };
+let cam = { x: 0, y: 0, z: 0.8 };
+let currentTool = 'pan'; 
+let selection = { start: null, current: null, ids: [] };
+let gameState = { units: [], map: [], buildings: [] };
+
+// --- NETWORKING ---
+peer = new Peer();
+peer.on('open', id => {
+    myId = id; document.getElementById('my-id').innerText = id;
+    document.getElementById('net-status').innerText = "Network Ready";
+    const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.get('join')) document.getElementById('join-id').value = urlParams.get('join');
+});
+
+peer.on('connection', conn => {
+    isHost = true;
+    setupConnection(conn);
+    document.getElementById('host-tools').classList.remove('hidden');
+});
+
+function connectToHost() {
+    const hostId = document.getElementById('join-id').value;
+    if(!hostId) return alert("Enter a Host ID");
+    const conn = peer.connect(hostId);
+    setupConnection(conn);
+}
+
+function setupConnection(conn) {
+    conn.on('open', () => {
+        connections.push(conn);
+        document.getElementById('player-count').innerText = connections.length + 1;
+        conn.on('data', data => handleData(data, conn));
+    });
+}
+
+function handleData(data, sender) {
+    if(data.type === 'START') {
+        gameState.map = data.map;
+        initGame();
+    }
+    if(data.type === 'SYNC') {
+        // Safe Client Sync
+        data.units.forEach(su => {
+            let lu = gameState.units.find(u => u.id === su.id);
+            if(lu) { lu.srvX = su.x; lu.srvY = su.y; lu.cargo = su.cargo; lu.owner = su.owner; }
+            else { su.srvX = su.x; su.srvY = su.y; gameState.units.push(su); }
+        });
+        gameState.units = gameState.units.filter(u => data.units.some(su => su.id === u.id));
+        gameState.buildings = data.buildings;
+        if(!isHost && data.res && data.res[myId]) resources = data.res[myId];
+    }
+    if(data.type === 'CMD') handleCommand(data);
+    if(data.type === 'SPAWN_REQ') spawnAt(data.sender, data.unitType);
+}
+
+// --- GAME LOGIC ---
+function broadcastStart() {
+    gameState.map = Array.from({length: MAP_SIZE}, () => Array.from({length: MAP_SIZE}, () => 
+        Math.random() < 0.1 ? 'TREE' : (Math.random() < 0.03 ? 'GOLD' : 'DIRT')));
+    
+    // Spawn Host Base
+    createBuilding(myId, 'base', 5*TILE, 5*TILE);
+    spawnAt(myId, 'worker', 6*TILE, 6*TILE);
+
+    // Spawn Guest Bases
+    connections.forEach((conn, i) => {
+        const x = (MAP_SIZE - 6 - (i*5)) * TILE;
+        const y = (MAP_SIZE - 6) * TILE;
+        createBuilding(conn.peer, 'base', x, y);
+        spawnAt(conn.peer, 'worker', x - TILE, y);
+        conn.send({ type: 'START', map: gameState.map });
+    });
+
+    initGame();
+}
+
+function initGame() {
+    document.getElementById('setup').classList.add('hidden');
+    ['top-bar', 'toolbar', 'action-bar'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+    const b = gameState.buildings.find(b => b.owner === myId);
+    if(b) { cam.x = b.x - window.innerWidth/2; cam.y = b.y - window.innerHeight/2; }
+    requestAnimationFrame(loop);
+}
+
+let lastSync = 0;
+function loop(t) {
+    if(isHost) {
+        gameState.units.forEach(u => {
+            const dx = u.tx - u.x, dy = u.ty - u.y;
+            const dist = Math.hypot(dx, dy);
+            if(dist > 2) { u.x += (dx/dist)*4; u.y += (dy/dist)*4; }
+            else if (u.type === 'worker') updateGathering(u);
+        });
+
+        if(t - lastSync > 50) {
+            const resData = { [myId]: resources };
+            connections.forEach(c => resData[c.peer] = {wood: 100, gold: 50}); // Simplified
+            connections.forEach(c => c.send({ type: 'SYNC', units: gameState.units, buildings: gameState.buildings, res: resData }));
+            lastSync = t;
+        }
+    } else {
+        gameState.units.forEach(u => {
+            u.x += (u.srvX - u.x) * 0.2;
+            u.y += (u.srvY - u.y) * 0.2;
+        });
+    }
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function updateGathering(u) {
+    const base = gameState.buildings.find(b => b.owner === u.owner && b.type === 'base');
+    const tile = gameState.map[Math.floor(u.y/TILE)]?.[Math.floor(u.x/TILE)];
+    if (!u.cargo && (tile === 'TREE' || tile === 'GOLD')) {
+        u.cargo = tile; u.lx = u.x; u.ly = u.y; u.tx = base.x; u.ty = base.y;
+    } else if (u.cargo && base && Math.hypot(u.x-base.x, u.y-base.y) < 40) {
+        if(u.owner === myId) resources[u.cargo === 'TREE' ? 'wood' : 'gold'] += 10;
+        u.cargo = null; u.tx = u.lx; u.ty = u.ly;
+    }
+}
+
+// --- RENDER ---
+function draw() {
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(cam.z, cam.z);
+    ctx.translate(-cam.x - canvas.width/2, -cam.y - canvas.height/2);
+
+    for(let y=0; y<MAP_SIZE; y++) {
+        for(let x=0; x<MAP_SIZE; x++) {
+            const t = gameState.map[y][x];
+            ctx.fillStyle = t === 'TREE' ? '#1b5e20' : (t === 'GOLD' ? '#ffd600' : '#2b1d0e');
+            ctx.fillRect(x*TILE, y*TILE, TILE, TILE);
+        }
+    }
+
+    gameState.buildings.forEach(b => {
+        ctx.fillStyle = b.owner === myId ? '#2196f3' : '#f44336';
+        ctx.fillRect(b.x-40, b.y-40, 80, 80);
+    });
+
+    gameState.units.forEach(u => {
+        const isSel = selection.ids.includes(u.id);
+        ctx.beginPath();
+        ctx.fillStyle = u.owner === myId ? (isSel ? '#00e5ff' : '#fff') : '#f44336';
+        ctx.arc(u.x, u.y, 18, 0, Math.PI*2);
+        ctx.fill();
+        if(isSel) { ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke(); }
+        if(u.cargo) {
+            ctx.fillStyle = u.cargo === 'TREE' ? '#4caf50' : '#ffeb3b';
+            ctx.fillRect(u.x-8, u.y-35, 16, 16);
+        }
+    });
+
+    ctx.restore();
+    if (currentTool === 'select' && selection.start && selection.current) {
+        ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2;
+        ctx.strokeRect(selection.start.x, selection.start.y, selection.current.x-selection.start.x, selection.current.y-selection.start.y);
+    }
+
+    document.getElementById('res-wood').innerText = resources.wood;
+    document.getElementById('res-gold').innerText = resources.gold;
+    document.getElementById('res-pop').innerText = gameState.units.filter(u=>u.owner===myId).length;
+}
+
+// --- INPUTS ---
+let isDown = false;
+canvas.addEventListener('pointerdown', e => {
+    isDown = true;
+    selection.start = {x: e.clientX, y: e.clientY};
+    selection.current = {x: e.clientX, y: e.clientY};
+});
+window.addEventListener('pointermove', e => {
+    if(!isDown) return;
+    if (currentTool === 'pan') {
+        cam.x -= (e.clientX - selection.current.x) / cam.z;
+        cam.y -= (e.clientY - selection.current.y) / cam.z;
+    }
+    selection.current = {x: e.clientX, y: e.clientY};
+});
+window.addEventListener('pointerup', e => {
+    if(!isDown) return;
+    isDown = false;
+    const s = screenToWorld(selection.start.x, selection.start.y);
+    const c = screenToWorld(selection.current.x, selection.current.y);
+
+    if (currentTool === 'select') {
+        selection.ids = gameState.units.filter(u => u.owner === myId && u.x > Math.min(s.x, c.x) && u.x < Math.max(s.x, c.x) && u.y > Math.min(s.y, c.y) && u.y < Math.max(s.y, c.y)).map(u => u.id);
+        if(selection.ids.length > 0) setTool('action'); 
+    } else if (currentTool === 'action') {
+        commandUnits(c.x, c.y);
+    }
+});
+
+function setTool(t) {
+    currentTool = t;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-'+t).classList.add('active');
+}
+
+function screenToWorld(sx, sy) {
+    return {
+        x: (sx - canvas.width/2) / cam.z + cam.x + canvas.width/2,
+        y: (sy - canvas.height/2) / cam.z + cam.y + canvas.height/2
+    };
+}
+
+function commandUnits(tx, ty) {
+    const data = { type: 'CMD', ids: selection.ids, tx, ty };
+    if(isHost) handleCommand(data); else connections[0].send(data);
+}
+
+function handleCommand(data) {
+    gameState.units.filter(u => data.ids.includes(u.id)).forEach(u => { u.tx = data.tx; u.ty = data.ty; u.cargo = null; });
+}
+
+function spawn(type) {
+    const cost = type === 'barracks' ? 100 : 50;
+    if(resources.wood >= cost) {
+        resources.wood -= cost;
+        if(isHost) spawnAt(myId, type); else connections[0].send({type: 'SPAWN_REQ', sender: myId, unitType: type});
+    }
+}
+
+function spawnAt(owner, type) {
+    const b = gameState.buildings.find(b => b.owner === owner);
+    if(type === 'barracks') createBuilding(owner, 'barracks', b.x + TILE*2, b.y);
+    else gameState.units.push({ id: Math.random(), owner, type, x: b.x, y: b.y, tx: b.x, ty: b.y, srvX: b.x, srvY: b.y, cargo: null });
+}
+
+function createBuilding(owner, type, x, y) { gameState.buildings.push({ id: Math.random(), owner, type, x, y }); }
+
+function copyLink() {
+    navigator.clipboard.writeText(window.location.origin + window.location.pathname + "?join=" + myId);
+    alert("Invite Link Copied!");
+}
+</script>
+</body>
+</html>
