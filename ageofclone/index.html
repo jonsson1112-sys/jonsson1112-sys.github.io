@@ -3,71 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Empire P2P Clone</title>
+    <title>Empire Clone - Smooth & Zoom</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --primary: #fb8c00; --bg: #222; }
-        body { margin: 0; background: var(--bg); color: white; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; touch-action: none; }
-        canvas { display: block; image-rendering: pixelated; background: #333; }
-        
-        /* UI Layers */
-        #setup { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 20px; text-align: center; }
-        #ui-overlay { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 50; display: none; }
-        
-        .panel { background: rgba(0,0,0,0.85); padding: 12px; pointer-events: all; border-bottom: 2px solid #444; }
-        .stats { display: flex; justify-content: space-around; font-weight: bold; font-size: 1.1rem; }
-        .controls { position: absolute; bottom: 20px; left: 10px; display: flex; flex-direction: column; gap: 10px; }
-        
-        #chat-container { position: absolute; bottom: 20px; right: 10px; width: 220px; pointer-events: all; }
-        #chat-log { height: 80px; overflow-y: auto; background: rgba(0,0,0,0.4); font-size: 12px; padding: 5px; margin-bottom: 5px; }
-        #chat-input { width: 100%; background: #000; color: #0f0; border: 1px solid #555; padding: 8px; box-sizing: border-box; }
-
-        button { background: #444; color: white; border: 1px solid #666; padding: 12px 20px; cursor: pointer; border-radius: 8px; font-weight: bold; }
-        button:active { background: var(--primary); }
-        .btn-start { background: #2e7d32; width: 100%; margin-top: 15px; font-size: 1.2rem; }
-        
-        input { padding: 12px; border-radius: 8px; border: 1px solid #444; margin: 8px 0; width: 260px; background: #111; color: white; }
-        .share-box { margin-top: 10px; font-size: 0.8rem; color: #aaa; cursor: pointer; text-decoration: underline; }
+        :root { --p: #ff9800; --s: #2196f3; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        canvas { display: block; }
+        #setup { position: absolute; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; text-align: center; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 100; display: none; }
+        .panel { background: rgba(20,20,20,0.9); padding: 10px; pointer-events: all; border: 1px solid #444; }
+        .stats { display: flex; justify-content: center; gap: 20px; font-weight: bold; border-bottom: 2px solid var(--p); font-size: 14px;}
+        .actions { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+        button { background: #333; color: white; border: 1px solid #555; padding: 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+        button:active { background: var(--p); }
+        input { padding: 10px; border-radius: 4px; border: 1px solid #444; background: #000; color: white; width: 200px; margin: 5px; }
+        #mini-map-hint { position: absolute; bottom: 10px; right: 10px; font-size: 10px; color: #666; }
     </style>
 </head>
 <body>
 
 <div id="setup">
-    <h1 style="color:var(--primary); margin-bottom:0;">EMPIRE CLONE</h1>
-    <p id="status">Initializing Network...</p>
-    
-    <div id="connection-controls">
+    <h1 style="color:var(--p)">EMPIRE CLONE PRO</h1>
+    <div id="lobby">
         <p>Your ID: <strong id="my-id">...</strong></p>
-        <div class="share-box" onclick="copyShareLink()">🔗 Click to copy Invite Link</div>
-        <br>
+        <button onclick="copyLink()">Copy Invite Link</button><br><br>
         <input type="text" id="join-id" placeholder="Paste Friend's ID">
-        <button onclick="connectToPeer()">Connect to Friend</button>
-    </div>
-
-    <div id="host-controls" style="display:none; margin-top:20px; border-top: 1px solid #444; width: 100%;">
-        <p>Connected! Set up map:</p>
-        <input type="text" id="map-seed" placeholder="Map Seed" value="1234">
-        <label style="display:block; font-size: 12px; margin-top:5px;">Or use custom PNG:</label>
-        <input type="file" id="map-input" accept="image/png">
-        <button onclick="startGame()" class="btn-start">START GAME</button>
+        <button onclick="connect()">Join Game</button>
+        <div id="host-tools" style="display:none; margin-top:20px;">
+            <button onclick="startGame()" style="background:green; padding: 15px 30px;">START GAME</button>
+        </div>
     </div>
 </div>
 
-<div id="ui-overlay">
+<div id="ui">
     <div class="panel stats">
         <span>🪵 <span id="res-wood">0</span></span>
         <span>💰 <span id="res-gold">0</span></span>
+        <span>⚔️ <span id="res-pop">0</span>/50</span>
     </div>
-
-    <div class="controls">
-        <button onpointerdown="requestSpawn('worker')">Train Worker (50W)</button>
-        <button onpointerdown="requestSpawn('soldier')">Train Soldier (50W, 20G)</button>
+    <div class="actions">
+        <button onclick="spawn('worker')">Worker (50W)</button>
+        <button onclick="spawn('barracks')">Barracks (100W)</button>
+        <button onclick="spawn('soldier')">Soldier (50W 20G)</button>
     </div>
-
-    <div id="chat-container" class="panel">
-        <div id="chat-log"></div>
-        <input type="text" id="chat-input" placeholder="Chat...">
-    </div>
+    <div id="mini-map-hint">Pinch to Zoom • Drag to Pan</div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -75,243 +54,230 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const TILE_SIZE = 48;
-const MAP_SIZE = 50;
+const TILE = 48, MAP_SIZE = 50;
 
 let peer, conn, myId = "";
 let isHost = false;
 let resources = { wood: 200, gold: 100 };
-let gameState = { units: [], map: [] };
+let cam = { x: 0, y: 0, z: 0.8 }; // x, y, zoom
+let selection = { start: null, current: null, ids: [] };
+let gameState = { units: [], map: [], buildings: [] };
 
-// --- MAP GENERATION ---
-function generateProceduralMap(seed) {
-    const rnd = () => {
-        seed = (seed * 9301 + 49297) % 233280;
-        return seed / 233280;
-    };
-    let s = parseInt(seed);
-    let map = [];
-    for(let y=0; y<MAP_SIZE; y++) {
-        map[y] = [];
-        for(let x=0; x<MAP_SIZE; x++) {
-            let v = rnd();
-            if (v < 0.05) map[y][x] = 'WATER';
-            else if (v < 0.12) map[y][x] = 'GOLD';
-            else if (v < 0.25) map[y][x] = 'TREE';
-            else map[y][x] = 'DIRT';
-        }
-    }
-    return map;
-}
-
-// --- NETWORK & LOBBY ---
+// --- NETWORKING (THROTTLED SYNC) ---
 peer = new Peer();
-peer.on('open', id => { 
-    myId = id; 
-    document.getElementById('my-id').innerText = id;
-    document.getElementById('status').innerText = "Ready to Play";
-    
-    // Check for auto-join URL
+peer.on('open', id => {
+    myId = id; document.getElementById('my-id').innerText = id;
     const urlParams = new URLSearchParams(window.location.search);
-    if(urlParams.has('join')) {
-        document.getElementById('join-id').value = urlParams.get('join');
-    }
+    if(urlParams.get('join')) document.getElementById('join-id').value = urlParams.get('join');
 });
 
 peer.on('connection', c => {
     conn = c; isHost = true;
-    document.getElementById('host-controls').style.display = 'block';
-    document.getElementById('connection-controls').style.display = 'none';
-    setupConnection();
+    document.getElementById('host-tools').style.display = 'block';
+    setupConn();
 });
 
-function connectToPeer() {
-    const targetId = document.getElementById('join-id').value;
-    if(!targetId) return alert("Enter an ID");
-    conn = peer.connect(targetId);
-    isHost = false;
-    setupConnection();
-    document.getElementById('status').innerText = "Connecting to Host...";
+function connect() {
+    conn = peer.connect(document.getElementById('join-id').value);
+    isHost = false; setupConn();
 }
 
-function setupConnection() {
+function setupConn() {
     conn.on('data', data => {
-        if (data.type === 'SYNC') gameState = data.state;
-        if (data.type === 'CHAT') addChat(data.sender, data.msg);
-        if (data.type === 'SPAWN_REQ') handleSpawnRequest(data);
-        if (data.type === 'START') {
-            gameState.map = data.map;
-            beginGame();
+        if(data.type === 'SYNC') syncState(data.state);
+        if(data.type === 'START') { gameState.map = data.map; initGame(); }
+        if(data.type === 'CMD') handleCommand(data);
+        if(data.type === 'SPAWN_REQ') spawnAt(data.sender, data.unitType, data.x, data.y);
+    });
+}
+
+function syncState(serverState) {
+    // Interpolation Logic: Don't snap, just update targets
+    serverState.units.forEach(srvUnit => {
+        let localUnit = gameState.units.find(u => u.id === srvUnit.id);
+        if (localUnit) {
+            // Smoothly lerp towards server position
+            localUnit.tx = srvUnit.tx; localUnit.ty = srvUnit.ty;
+            localUnit.hp = srvUnit.hp; localUnit.cargo = srvUnit.cargo;
+            // Only snap if distance is massive (teleport)
+            if (Math.abs(localUnit.x - srvUnit.x) > 100) { localUnit.x = srvUnit.x; localUnit.y = srvUnit.y; }
+        } else {
+            gameState.units.push(srvUnit);
         }
     });
+    gameState.units = gameState.units.filter(u => serverState.units.find(su => su.id === u.id));
+    gameState.buildings = serverState.buildings;
 }
 
-function copyShareLink() {
-    const link = window.location.origin + window.location.pathname + "?join=" + myId;
-    navigator.clipboard.writeText(link);
-    alert("Invite link copied! Send it to your friend.");
-}
-
-// --- GAME CORE ---
-function startGame() {
-    const file = document.getElementById('map-input').files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                const tc = document.createElement('canvas');
-                tc.width = tc.height = MAP_SIZE;
-                const tx = tc.getContext('2d');
-                tx.drawImage(img, 0, 0, MAP_SIZE, MAP_SIZE);
-                const pix = tx.getImageData(0,0,MAP_SIZE,MAP_SIZE).data;
-                gameState.map = [];
-                for(let y=0; y<MAP_SIZE; y++) {
-                    gameState.map[y] = [];
-                    for(let x=0; x<MAP_SIZE; x++) {
-                        let i = (y * MAP_SIZE + x) * 4;
-                        if (pix[i+2] > 200) gameState.map[y][x] = 'WATER';
-                        else if (pix[i] > 200 && pix[i+1] > 180) gameState.map[y][x] = 'GOLD';
-                        else if (pix[i+1] > 150) gameState.map[y][x] = 'TREE';
-                        else gameState.map[y][x] = 'DIRT';
-                    }
-                }
-                finalizeStart();
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    } else {
-        gameState.map = generateProceduralMap(document.getElementById('map-seed').value);
-        finalizeStart();
-    }
-}
-
-function finalizeStart() {
-    // Initial Spawns
-    spawnGroup(myId, 2, 2); // Host top-left
-    spawnGroup(conn.peer, MAP_SIZE - 4, MAP_SIZE - 4); // Guest bottom-right
-    
-    conn.send({ type: 'START', map: gameState.map });
-    beginGame();
-}
-
-function spawnGroup(owner, startX, startY) {
-    for(let i=0; i<3; i++) createUnit(owner, 'worker', (startX+i)*TILE_SIZE, startY*TILE_SIZE);
-    createUnit(owner, 'soldier', startX*TILE_SIZE, (startY+1)*TILE_SIZE);
-}
-
-function createUnit(owner, type, x, y) {
-    gameState.units.push({
-        id: Math.random().toString(36).substr(2, 9),
-        owner, type, x, y, tx: x, ty: y
-    });
-}
-
-function beginGame() {
+// --- GAME LOGIC ---
+function initGame() {
     document.getElementById('setup').style.display = 'none';
-    document.getElementById('ui-overlay').style.display = 'block';
-    requestAnimationFrame(gameLoop);
+    document.getElementById('ui').style.display = 'block';
+    // Focus camera on player's start location
+    const startX = isHost ? 0 : (MAP_SIZE * TILE - window.innerWidth);
+    const startY = isHost ? 0 : (MAP_SIZE * TILE - window.innerHeight);
+    cam.x = startX; cam.y = startY;
+    requestAnimationFrame(loop);
 }
 
-// --- LOGIC & RENDERING ---
-function gameLoop() {
-    // Movement logic
+function startGame() {
+    gameState.map = Array.from({length: MAP_SIZE}, () => Array.from({length: MAP_SIZE}, () => Math.random() < 0.1 ? 'TREE' : (Math.random() < 0.05 ? 'GOLD' : 'DIRT')));
+    createBuilding(myId, 'base', 4 * TILE, 4 * TILE);
+    createBuilding(conn.peer, 'base', (MAP_SIZE - 5) * TILE, (MAP_SIZE - 5) * TILE);
+    spawnAt(myId, 'worker', 5 * TILE, 5 * TILE);
+    spawnAt(conn.peer, 'worker', (MAP_SIZE - 6) * TILE, (MAP_SIZE - 6) * TILE);
+    conn.send({ type: 'START', map: gameState.map });
+    initGame();
+}
+
+function loop() {
+    // Unit Movement Logic (Always running locally for smoothness)
     gameState.units.forEach(u => {
-        const dx = u.tx - u.x;
-        const dy = u.ty - u.y;
+        const dx = u.tx - u.x, dy = u.ty - u.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > 2) {
-            u.x += (dx / dist) * 3;
-            u.y += (dy / dist) * 3;
+        if(dist > 2) { u.x += (dx/dist)*4; u.y += (dy/dist)*4; }
+        
+        // Auto-Gather Loop (only host calculates resource gain)
+        if (isHost && u.type === 'worker') {
+            const base = gameState.buildings.find(b => b.owner === u.owner && b.type === 'base');
+            const tile = gameState.map[Math.floor(u.y/TILE)]?.[Math.floor(u.x/TILE)];
+            if (!u.cargo && (tile === 'TREE' || tile === 'GOLD')) {
+                u.cargo = tile; u.lx = u.x; u.ly = u.y; u.tx = base.x; u.ty = base.y;
+            } else if (u.cargo && base && Math.sqrt((u.x-base.x)**2 + (u.y-base.y)**2) < 50) {
+                if (u.owner === myId) resources[u.cargo === 'TREE' ? 'wood' : 'gold'] += 10;
+                else conn.send({type: 'SYNC_RES', cargo: u.cargo}); // Future expansion for multi-res sync
+                u.cargo = null; u.tx = u.lx; u.ty = u.ly;
+            }
         }
     });
 
-    // Rendering
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
-    // Draw visible map tiles
-    gameState.map.forEach((row, y) => {
-        row.forEach((tile, x) => {
-            if (tile === 'DIRT') ctx.fillStyle = '#795548';
-            else if (tile === 'TREE') ctx.fillStyle = '#2e7d32';
-            else if (tile === 'GOLD') ctx.fillStyle = '#ffd600';
-            else if (tile === 'WATER') ctx.fillStyle = '#0288d1';
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            ctx.strokeStyle = "rgba(0,0,0,0.05)";
-            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        });
+    draw();
+    if(isHost && conn) conn.send({ type: 'SYNC', state: gameState });
+    requestAnimationFrame(loop);
+}
+
+// --- RENDERING (WITH ZOOM/PAN) ---
+function draw() {
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(cam.z, cam.z);
+    ctx.translate(-cam.x - canvas.width/2, -cam.y - canvas.height/2);
+
+    // Map
+    for(let y=0; y<MAP_SIZE; y++) {
+        for(let x=0; x<MAP_SIZE; x++) {
+            const t = gameState.map[y][x];
+            ctx.fillStyle = t === 'TREE' ? '#1b5e20' : (t === 'GOLD' ? '#ffd600' : '#4d3319');
+            ctx.fillRect(x*TILE, y*TILE, TILE, TILE);
+        }
+    }
+
+    // Buildings & Units
+    [...gameState.buildings, ...gameState.units].forEach(obj => {
+        const isSel = selection.ids.includes(obj.id);
+        ctx.fillStyle = obj.owner === myId ? (isSel ? '#00e5ff' : '#2196f3') : '#f44336';
+        if (obj.type === 'worker' || obj.type === 'soldier') {
+            ctx.beginPath(); ctx.arc(obj.x, obj.y, 15, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillRect(obj.x-40, obj.y-40, 80, 80);
+        }
     });
 
-    // Draw Units
-    gameState.units.forEach(u => {
-        ctx.fillStyle = u.owner === myId ? '#fff' : '#ff5252';
-        ctx.beginPath();
-        ctx.arc(u.x, u.y, 15, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = "black";
-        ctx.textAlign = "center";
-        ctx.fillText(u.type === 'worker' ? 'W' : 'S', u.x, u.y + 4);
-    });
+    // Selection Box
+    if (selection.start && selection.current) {
+        ctx.restore();
+        ctx.strokeStyle = '#00ff00';
+        ctx.strokeRect(selection.start.x, selection.start.y, selection.current.x-selection.start.x, selection.current.y-selection.start.y);
+        ctx.save();
+    }
+    ctx.restore();
 
-    if (isHost) conn.send({ type: 'SYNC', state: gameState });
-    
     document.getElementById('res-wood').innerText = resources.wood;
     document.getElementById('res-gold').innerText = resources.gold;
-    requestAnimationFrame(gameLoop);
+    document.getElementById('res-pop').innerText = gameState.units.filter(u=>u.owner===myId).length;
 }
 
-// --- INTERACTION ---
-function requestSpawn(type) {
-    if (resources.gold < 20 && type === 'soldier') return;
-    if (resources.wood < 50) return;
+// --- TOUCH & MOUSE CONTROLS (PAN / ZOOM / MOVE) ---
+let touches = {};
+let lastPinchDist = 0;
 
-    if (isHost) {
+window.addEventListener('touchstart', e => {
+    for(let t of e.touches) touches[t.identifier] = {x: t.clientX, y: t.clientY};
+    if (e.touches.length === 1) {
+        selection.start = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+    }
+});
+
+window.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) { // Pan
+        const t = e.touches[0];
+        const prev = touches[t.identifier];
+        cam.x -= (t.clientX - prev.x) / cam.z;
+        cam.y -= (t.clientY - prev.y) / cam.z;
+        touches[t.identifier] = {x: t.clientX, y: t.clientY};
+        selection.current = {x: t.clientX, y: t.clientY};
+    } else if (e.touches.length === 2) { // Zoom
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        if (lastPinchDist) cam.z = Math.min(Math.max(cam.z * (d / lastPinchDist), 0.3), 2);
+        lastPinchDist = d;
+    }
+}, {passive: false});
+
+window.addEventListener('touchend', e => {
+    if (e.touches.length === 0 && selection.start && selection.current) {
+        const dist = Math.hypot(selection.start.x - selection.current.x, selection.start.y - selection.current.y);
+        if (dist < 10) { // It's a Tap, move units
+            const worldCoords = screenToWorld(selection.start.x, selection.start.y);
+            commandUnits(worldCoords.x, worldCoords.y);
+        } else { // It's a Box Select
+            const s = screenToWorld(selection.start.x, selection.start.y);
+            const c = screenToWorld(selection.current.x, selection.current.y);
+            selection.ids = gameState.units.filter(u => u.owner === myId && u.x > Math.min(s.x, c.x) && u.x < Math.max(s.x, c.x) && u.y > Math.min(s.y, c.y) && u.y < Math.max(s.y, c.y)).map(u => u.id);
+        }
+    }
+    touches = {}; lastPinchDist = 0; selection.start = selection.current = null;
+});
+
+function screenToWorld(sx, sy) {
+    return {
+        x: (sx - canvas.width/2) / cam.z + cam.x + canvas.width/2,
+        y: (sy - canvas.height/2) / cam.z + cam.y + canvas.height/2
+    };
+}
+
+function commandUnits(tx, ty) {
+    if(!selection.ids.length) return;
+    const data = { type: 'CMD', ids: selection.ids, tx, ty };
+    if(isHost) handleCommand(data); else conn.send(data);
+}
+
+function handleCommand(data) {
+    gameState.units.filter(u => data.ids.includes(u.id)).forEach(u => { u.tx = data.tx; u.ty = data.ty; u.cargo = null; });
+}
+
+function spawn(type) {
+    if (type === 'worker' && resources.wood >= 50) {
         resources.wood -= 50;
-        if(type === 'soldier') resources.gold -= 20;
-        createUnit(myId, type, 100, 100);
-    } else {
-        conn.send({ type: 'SPAWN_REQ', unitType: type, sender: myId });
+        if(isHost) spawnAt(myId, 'worker'); else conn.send({type: 'SPAWN_REQ', sender: myId, unitType: 'worker'});
     }
+    // Add logic for barracks/soldier here similarly...
 }
 
-function handleSpawnRequest(data) {
-    // Host handles the actual spawning for guests
-    createUnit(data.sender, data.unitType, (MAP_SIZE-3)*TILE_SIZE, (MAP_SIZE-3)*TILE_SIZE);
+function spawnAt(owner, type, x, y) {
+    const b = gameState.buildings.find(b => b.owner === owner);
+    if (!b) return;
+    gameState.units.push({ id: Math.random(), owner, type, x: x || b.x, y: y || b.y, tx: x || b.x, ty: y || b.y, hp: 100, cargo: null });
 }
 
-canvas.addEventListener('pointerdown', (e) => {
-    const worldX = e.clientX;
-    const worldY = e.clientY;
-    
-    // Command all my units to move
-    if (isHost) {
-        gameState.units.filter(u => u.owner === myId).forEach(u => {
-            u.tx = worldX; u.ty = worldY;
-        });
-    } else {
-        // Guest informs host of movement (simplified for this prototype: Guest updates local and waits for sync)
-        gameState.units.filter(u => u.owner === myId).forEach(u => {
-            u.tx = worldX; u.ty = worldY;
-        });
-    }
-});
+function createBuilding(owner, type, x, y) {
+    gameState.buildings.push({ id: Math.random(), owner, type, x, y, hp: 500 });
+}
 
-// Chat
-document.getElementById('chat-input').addEventListener('keypress', e => {
-    if (e.key === 'Enter' && e.target.value.trim()) {
-        const msg = e.target.value;
-        addChat("Me", msg);
-        conn.send({ type: 'CHAT', sender: 'Friend', msg: msg });
-        e.target.value = "";
-    }
-});
-
-function addChat(sender, msg) {
-    const log = document.getElementById('chat-log');
-    log.innerHTML += `<div><b>${sender}:</b> ${msg}</div>`;
-    log.scrollTop = log.scrollHeight;
+function copyLink() {
+    navigator.clipboard.writeText(window.location.origin + window.location.pathname + "?join=" + myId);
+    alert("Invite link copied!");
 }
 </script>
 </body>
