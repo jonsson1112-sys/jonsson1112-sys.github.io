@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebAOE Clone - P2P</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+        #setup { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 20px; border: 2px solid #555; }
+        canvas { display: block; image-rendering: pixelated; }
+        .stats { background: rgba(0,0,0,0.7); padding: 10px; pointer-events: all; }
+        button { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <h2>Empire Clone Setup</h2>
+    <p>Your ID: <strong id="my-id">...</strong></p>
+    <input type="text" id="join-id" placeholder="Paste Friend's ID">
+    <button onclick="connectToPeer()">Connect to Friend</button>
+    <hr>
+    <label>Select Map (PNG): </label>
+    <input type="file" id="map-input" accept="image/png"><br><br>
+    <button onclick="startGame()" id="start-btn" style="display:none; width:100%; height:40px;">START GAME</button>
+</div>
+
+<div id="ui" style="display:none;">
+    <div class="stats">
+        Wood: <span id="res-wood">0</span> | Gold: <span id="res-gold">0</span> | Pop: <span id="res-pop">0</span>
+        <br><br>
+        <button onclick="spawnUnit('worker')">Train Worker (50W)</button>
+        <button onclick="spawnUnit('soldier')">Train Soldier (50W, 20G)</button>
+    </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const TILE_SIZE = 32;
+
+let peer, conn;
+let isHost = false;
+let gameState = { players: {}, map: [], units: [] };
+let myId = "";
+let resources = { wood: 200, gold: 100 };
+
+// --- MAP COLORS ---
+const COLORS = {
+    DIRT:  [165, 42, 42],   // Brown
+    TREE:  [0, 128, 0],     // Green
+    GOLD:  [255, 215, 0],   // Yellow
+    WATER: [0, 0, 255]      // Blue
+};
+
+// --- INITIALIZE PEER ---
+peer = new Peer();
+peer.on('open', id => {
+    myId = id;
+    document.getElementById('my-id').innerText = id;
+});
+
+peer.on('connection', c => {
+    conn = c;
+    isHost = true;
+    setupConnection();
+    document.getElementById('start-btn').style.display = 'block';
+});
+
+function connectToPeer() {
+    const targetId = document.getElementById('join-id').value;
+    conn = peer.connect(targetId);
+    isHost = false;
+    setupConnection();
+}
+
+function setupConnection() {
+    conn.on('data', data => {
+        if (data.type === 'STATE_UPDATE') gameState = data.state;
+        if (data.type === 'START') {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ui').style.display = 'block';
+            initGameLoop();
+        }
+    });
+}
+
+function startGame() {
+    if (isHost) {
+        conn.send({ type: 'START' });
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('ui').style.display = 'block';
+        processMap();
+        initGameLoop();
+    }
+}
+
+// --- MAP PROCESSING ---
+function processMap() {
+    const file = document.getElementById('map-input').files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(img, 0, 0);
+            const data = tCtx.getImageData(0,0, img.width, img.height).data;
+            
+            gameState.map = [];
+            for (let y = 0; y < img.height; y++) {
+                gameState.map[y] = [];
+                for (let x = 0; x < img.width; x++) {
+                    const i = (y * img.width + x) * 4;
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    let type = 'DIRT';
+                    if (g > 100 && r < 100) type = 'TREE';
+                    if (r > 200 && g > 180 && b < 100) type = 'GOLD';
+                    if (b > 200 && r < 100) type = 'WATER';
+                    gameState.map[y][x] = type;
+                }
+            }
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// --- GAME LOGIC ---
+function spawnUnit(type) {
+    const unit = {
+        id: Math.random(),
+        owner: myId,
+        type: type,
+        x: 100, y: 100,
+        targetX: 100, targetY: 100,
+        hp: 100
+    };
+    gameState.units.push(unit);
+}
+
+function update() {
+    gameState.units.forEach(u => {
+        const dx = u.targetX - u.x;
+        const dy = u.targetY - u.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 2) {
+            u.x += dx / dist * 2;
+            u.y += dy / dist * 2;
+        }
+    });
+
+    if (isHost && conn) {
+        conn.send({ type: 'STATE_UPDATE', state: gameState });
+    }
+}
+
+function draw() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    ctx.clearRect(0,0, canvas.width, canvas.height);
+
+    // Draw Map
+    if (gameState.map) {
+        gameState.map.forEach((row, y) => {
+            row.forEach((tile, x) => {
+                if (tile === 'DIRT') ctx.fillStyle = '#A52A2A';
+                else if (tile === 'TREE') ctx.fillStyle = '#008000';
+                else if (tile === 'GOLD') ctx.fillStyle = '#FFD700';
+                else if (tile === 'WATER') ctx.fillStyle = '#0000FF';
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            });
+        });
+    }
+
+    // Draw Units
+    gameState.units.forEach(u => {
+        ctx.fillStyle = u.owner === myId ? 'white' : 'red';
+        ctx.beginPath();
+        ctx.arc(u.x, u.y, 10, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillText(u.type, u.x - 15, u.y - 15);
+    });
+}
+
+function initGameLoop() {
+    setInterval(() => {
+        update();
+        draw();
+        document.getElementById('res-wood').innerText = resources.wood;
+        document.getElementById('res-gold').innerText = resources.gold;
+    }, 1000/60);
+}
+
+// Input handling
+canvas.onmousedown = (e) => {
+    gameState.units.forEach(u => {
+        if (u.owner === myId) {
+            u.targetX = e.clientX;
+            u.targetY = e.clientY;
+        }
+    });
+};
+</script>
+</body>
+</html>
