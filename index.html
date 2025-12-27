@@ -667,7 +667,7 @@ class Player {
             else if(tile === TILES.POISON) {
                 // Poison damages player
                 core.hp -= 0.5;
-                map[ty][tx] = 0; // Poison disappears when touched
+                // map[ty][tx] = 0; // Poison disappears when touched
             }
             else if(tile === TILES.HEALTH) {
                 map[ty][tx] = 0; 
@@ -985,7 +985,7 @@ class Enemy {
         if(tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
             if(map[ty][tx] === TILES.POISON) {
                 this.health -= 5;
-                map[ty][tx] = 0; // Poison disappears
+                // map[ty][tx] = 0; // Poison disappears
             } else if(map[ty][tx] === TILES.SAND) {
                 this.speed = this.baseSpeed * 0.4;
                 if(!this.slowDuration) this.slowDuration = 30;
@@ -1185,10 +1185,10 @@ function getCol(x,y,isB=false) {
 
 function getProximityBoost(gx, gy, tileType) {
     let count = 0;
-    for(let y = gy-1; y <= gy+1; y++) 
-        for(let x = gx-1; x <= gx+1; x++) 
+    for(let y = gy-2; y <= gy+2; y++) 
+        for(let x = gx-2; x <= gx+2; x++) 
             if(x>=0 && x<MAP_WIDTH && y>=0 && y<MAP_HEIGHT && map[y][x] === tileType) count++;
-    return Math.min(count, 4) / 4;
+    return Math.min(count, 99999) / 4;
 }
 
 function createExplosion(x, y) {
@@ -1204,6 +1204,7 @@ function createExplosion(x, y) {
 }
 
 function startWave() {
+    if (core.hp < core.maxHp / 2) core.hp = core.maxHp / 2;
     if (wave === 1) document.querySelectorAll('.setup-input').forEach(i => i.disabled = true);
     gameState = 'PLAYING'; 
     document.getElementById('editorUI').classList.add('hidden');
@@ -1239,10 +1240,10 @@ function update() {
     turrets.forEach(t=>t.update());
     
     // Farm income
-    if(Math.random()<0.01) { 
-        money += farms.length * 10; 
-        document.getElementById('moneyDisplay').innerText = money; 
-    }
+    // if(Math.random()<0.01) { 
+        // money += farms.length * 10; 
+        // document.getElementById('moneyDisplay').innerText = money; 
+    // }
     
     // Update enemies and remove dead ones
     enemies.forEach((en, i) => { 
@@ -1303,6 +1304,9 @@ function update() {
     // Wave completion check
     if(enemies.length === 0 && gameState === 'PLAYING'){ 
         gameState='EDITOR'; 
+        money += farms.length * 120;
+        if (core.hp < core.maxHp / 2) core.hp = core.maxHp / 2;
+        document.getElementById('moneyDisplay').innerText = money; 
         wave++; 
         document.getElementById('editorUI').classList.remove('hidden'); 
         money += 500; 
