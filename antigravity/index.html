@@ -333,9 +333,6 @@
 
         /* Mobile specific CSS */
         @media (max-width: 800px) {
-            #mobile-mode-toggle-container {
-                display: flex !important;
-            }
 
             #left-panel,
             #right-panel {
@@ -487,12 +484,6 @@
         <!-- RIGHT PANEL (info/unit menu) -->
         <div id="right-panel">
             <div id="info-panel"></div>
-            <div id="mobile-mode-toggle-container" style="padding: 12px 8px; margin-top: auto; display: none; border-top: 1px solid #333; align-items: center; background: #1a1a1a; flex-shrink: 0;">
-                <label style="font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; width: 100%;">
-                    <input type="checkbox" id="mobile-mode-toggle" style="cursor: pointer; transform: scale(1.5); margin-left: 4px;">
-                    Set Rally Point
-                </label>
-            </div>
         </div>
     </div>
 
@@ -777,7 +768,6 @@
         // Multiplayer
         let peer = null, myPeerId = null, connections = [], connectedPlayers = [];
         let isHost = false, isMultiplayer = false;
-        let mobileRallyMode = false;
         let longPressRallyEnabled = window.innerWidth <= 800;
 
         // ============================================================
@@ -4810,11 +4800,10 @@
                     touchStartX = t.clientX;
                     touchStartY = t.clientY;
                     
-                    let button = mobileRallyMode ? 2 : 0;
-                    let syntheticDown = new MouseEvent('mousedown', { button: button, clientX: t.clientX, clientY: t.clientY });
+                    let syntheticDown = new MouseEvent('mousedown', { button: 0, clientX: t.clientX, clientY: t.clientY });
                     gameArea.dispatchEvent(syntheticDown);
 
-                    if (!mobileRallyMode && longPressRallyEnabled) {
+                    if (longPressRallyEnabled) {
                         longPressTimer = setTimeout(() => {
                             longPressTimer = null;
                             longPressFired = true;
@@ -4900,8 +4889,7 @@
                 if (keys.length === 0) {
                     if (!longPressFired) {
                         let t = e.changedTouches[0];
-                        let button = mobileRallyMode ? 2 : 0;
-                        let syntheticUp = new MouseEvent('mouseup', { button: button, clientX: t.clientX, clientY: t.clientY });
+                        let syntheticUp = new MouseEvent('mouseup', { button: 0, clientX: t.clientX, clientY: t.clientY });
                         gameArea.dispatchEvent(syntheticUp);
                     }
                     
@@ -4923,13 +4911,6 @@
                 singleTouchId = null;
                 longPressFired = false;
             }, { passive: false });
-
-            let mobileToggle = document.getElementById('mobile-mode-toggle');
-            if (mobileToggle) {
-                mobileToggle.addEventListener('change', (e) => {
-                    mobileRallyMode = e.target.checked;
-                });
-            }
 
             let longPressToggle = document.getElementById('setting-long-press');
             if (longPressToggle) {
