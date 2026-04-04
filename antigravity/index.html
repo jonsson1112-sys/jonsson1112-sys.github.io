@@ -1173,10 +1173,14 @@
                     visited[y][x] = true;
                     let cellType = grid[y][x].type;
 
+                    // Assign areaId immediately when enqueuing so no cell is orphaned
+                    grid[y][x].areaId = areaId;
+
                     while (queue.length > 0 && cells.length < targetSize) {
                         let cur = queue.shift();
                         cells.push({ x: cur.x, y: cur.y });
-                        grid[cur.y][cur.x].areaId = areaId;
+
+                        if (cells.length >= targetSize) break; // Don't enqueue more neighbors once full
 
                         let dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
                         for (let i = dirs.length - 1; i > 0; i--) {
@@ -1187,6 +1191,7 @@
                             let nx = cur.x + dx, ny = cur.y + dy;
                             if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H && !visited[ny][nx] && grid[ny][nx].type === cellType) {
                                 visited[ny][nx] = true;
+                                grid[ny][nx].areaId = areaId; // Assign areaId at enqueue time
                                 queue.push({ x: nx, y: ny });
                             }
                         }
