@@ -4145,13 +4145,15 @@
             // Unknown areas
             if (!fullVisibility && visibilityGrid.length > 0) {
                 minimapCtx.fillStyle = '#000';
+                minimapCtx.beginPath();
                 for (let y = 0; y < GRID_H; y++) {
                     for (let x = 0; x < GRID_W; x++) {
                         if (!visibilityGrid[y] || visibilityGrid[y][x] === 0) {
-                            minimapCtx.fillRect(x * scale, y * scale, Math.max(1, scale), Math.max(1, scale));
+                            minimapCtx.rect(x * scale, y * scale, scale, scale);
                         }
                     }
                 }
+                minimapCtx.fill();
             }
 
             // Walls/buildings
@@ -5992,7 +5994,10 @@
                     'iceServers': [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:global.stun.twilio.com:3478' },
-                        { urls: 'stun:stun.cloudflare.com:3478' }
+                        { urls: 'stun:stun.cloudflare.com:3478' },
+                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
                     ],
                     'sdpSemantics': 'unified-plan'
                 }
