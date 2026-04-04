@@ -4427,8 +4427,26 @@
                         if (!isTileVisible(gx, gy)) { playSound('cant_place'); return; }
                         // Short-circuit for immediate cant_place feedback (affordability / validity)
                         let _cd = CARD_TYPES[selectedBuildItem];
-                        let _canPlace = _cd && players[localPlayerId].money >= _cd.price &&
-                            (canStackAt(gx, gy, selectedBuildItem, localPlayerId) || canBuildAt(gx, gy, localPlayerId));
+                        let _canPlace = false;
+                        if (selectedBuildItem === 'area_upgrader') {
+                            let aId = grid[gy][gx].areaId;
+                            let area = aId !== -1 ? areas.find(a => a.id === aId) : null;
+                            if (area) {
+                                let filledCount = 0;
+                                for (let cp of area.cells) {
+                                    let c = grid[cp.y][cp.x];
+                                    if (c.type === TYPE_WALL && towers.find(t => t.gx === cp.x && t.gy === cp.y)) filledCount++;
+                                    else if (c.item) filledCount++;
+                                    else if (barracks.find(b => b.gx === cp.x && b.gy === cp.y)) filledCount++;
+                                    else if (collectorSpawners.find(s => s.gx === cp.x && s.gy === cp.y)) filledCount++;
+                                }
+                                let upgCost = getAreaUpgradeCost(area.multiplierLevel || 0);
+                                _canPlace = filledCount === area.cells.length && (area.multiplierLevel || 0) < 5 && players[localPlayerId].money >= upgCost;
+                            }
+                        } else {
+                            _canPlace = _cd && players[localPlayerId].money >= _cd.price &&
+                                (canStackAt(gx, gy, selectedBuildItem, localPlayerId) || canBuildAt(gx, gy, localPlayerId));
+                        }
                         if (!_canPlace) { playSound('cant_place'); return; }
                         queueAction({ action: 'place', gx, gy, itemType: selectedBuildItem });
                         updateBuildMenu();
