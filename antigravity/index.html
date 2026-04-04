@@ -438,7 +438,8 @@
                 FS</button>
             <span style="display:inline-flex; align-items:center;">
                 <input type="checkbox" id="setting-long-press" style="margin-right:2px; cursor:pointer;">
-                <label for="setting-long-press" style="cursor:pointer; font-size:12px; color:#ddd;">Long Press Rally</label>
+                <label for="setting-long-press" style="cursor:pointer; font-size:12px; color:#ddd;">Long Press
+                    Rally</label>
             </span>
             <span style="display:inline-flex; align-items:center;">
                 <input type="checkbox" id="setting-range-outlines" style="margin-right:2px; cursor:pointer;">
@@ -1929,7 +1930,19 @@
                 if (closest) {
                     this.targetUnit = closest;
                     this.commandState = CMD_ATTACKING;
+                    return;
                 }
+                // Also check enemy buildings in range
+                let _buildingAggro = (list) => {
+                    for (let b of list) {
+                        if (b.owner === this.owner || b.hp <= 0) continue;
+                        if (Math.hypot(b.x - this.x, b.y - this.y) < aggroRange) {
+                            this.targetBuilding = b; this.commandState = CMD_ATTACKING; return true;
+                        }
+                    }
+                    return false;
+                };
+                if (_buildingAggro(towers) || _buildingAggro(barracks) || _buildingAggro(collectorSpawners)) return;
             }
 
             doMoving(spd) {
@@ -2812,7 +2825,7 @@
                             } else {
                                 let extract = Math.min(10, u.workerTarget.gold);
                                 u.workerTarget.gold -= extract;
-                                u.carryingValue = extract;
+                                u.carryingValue = extract * (u.unitLevel || 1);
                                 if (u.workerTarget.gold <= 0) {
                                     let mine = u.workerTarget;
                                     grid[mine.gy][mine.gx].type = TYPE_FLOOR;
@@ -2857,7 +2870,7 @@
                         if (dist <= 24) {
                             let tKey = u.workerTarget.type === 'barrack' ? 'barrack_' + u.workerTarget.unitType : u.workerTarget.type;
                             let p = CARD_TYPES[tKey]; let refund = Math.floor((p ? p.price : 0) * (u.workerTarget.stacks || 1) * 0.1);
-                            u.carryingValue = refund;
+                            u.carryingValue = refund * (u.unitLevel || 1);
                             destroyBuilding(u.workerTarget);
                             u.workerTarget = null; u.workerState = 'RETURNING'; _workerReturnPath(u);
                         } else {
@@ -4799,7 +4812,7 @@
                     longPressFired = false;
                     touchStartX = t.clientX;
                     touchStartY = t.clientY;
-                    
+
                     let syntheticDown = new MouseEvent('mousedown', { button: 0, clientX: t.clientX, clientY: t.clientY });
                     gameArea.dispatchEvent(syntheticDown);
 
@@ -4892,7 +4905,7 @@
                         let syntheticUp = new MouseEvent('mouseup', { button: 0, clientX: t.clientX, clientY: t.clientY });
                         gameArea.dispatchEvent(syntheticUp);
                     }
-                    
+
                     touchCenterInitial = null;
                     singleTouchId = null;
                     longPressFired = false;
