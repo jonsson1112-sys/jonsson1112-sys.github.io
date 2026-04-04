@@ -440,6 +440,10 @@
                 style="background:transparent; border:1px solid #444; color:#ddd; cursor:pointer; font-size:12px; padding:2px 6px; border-radius:3px;">⛶
                 FS</button>
             <span style="display:inline-flex; align-items:center;">
+                <input type="checkbox" id="setting-long-press" style="margin-right:2px; cursor:pointer;">
+                <label for="setting-long-press" style="cursor:pointer; font-size:12px; color:#ddd;">Long Press Rally</label>
+            </span>
+            <span style="display:inline-flex; align-items:center;">
                 <input type="checkbox" id="setting-range-outlines" style="margin-right:2px; cursor:pointer;">
                 <label for="setting-range-outlines" style="cursor:pointer; font-size:12px; color:#ddd;">Outlines</label>
             </span>
@@ -483,9 +487,9 @@
         <!-- RIGHT PANEL (info/unit menu) -->
         <div id="right-panel">
             <div id="info-panel"></div>
-            <div id="mobile-mode-toggle-container" style="padding: 4px; margin-top: auto; display: none; border-top: 1px solid #333; align-items: center; background: #1a1a1a; flex-shrink: 0;">
-                <label style="font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; color: #ddd;">
-                    <input type="checkbox" id="mobile-mode-toggle" style="cursor: pointer;">
+            <div id="mobile-mode-toggle-container" style="padding: 12px 8px; margin-top: auto; display: none; border-top: 1px solid #333; align-items: center; background: #1a1a1a; flex-shrink: 0;">
+                <label style="font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; width: 100%;">
+                    <input type="checkbox" id="mobile-mode-toggle" style="cursor: pointer; transform: scale(1.5); margin-left: 4px;">
                     Set Rally Point
                 </label>
             </div>
@@ -774,6 +778,7 @@
         let peer = null, myPeerId = null, connections = [], connectedPlayers = [];
         let isHost = false, isMultiplayer = false;
         let mobileRallyMode = false;
+        let longPressRallyEnabled = window.innerWidth <= 800;
 
         // ============================================================
         // AUDIO ENGINE
@@ -4786,6 +4791,10 @@
             let cameraXInitial = 0;
             let cameraYInitial = 0;
             let singleTouchId = null;
+            let longPressTimer = null;
+            let longPressFired = false;
+            let touchStartX = 0;
+            let touchStartY = 0;
 
             gameArea.addEventListener('touchstart', (e) => {
                 e.preventDefault();
@@ -4797,11 +4806,26 @@
                 if (keys.length === 1) {
                     let t = activeTouches[keys[0]];
                     singleTouchId = t.identifier;
+                    longPressFired = false;
+                    touchStartX = t.clientX;
+                    touchStartY = t.clientY;
                     
                     let button = mobileRallyMode ? 2 : 0;
                     let syntheticDown = new MouseEvent('mousedown', { button: button, clientX: t.clientX, clientY: t.clientY });
                     gameArea.dispatchEvent(syntheticDown);
+
+                    if (!mobileRallyMode && longPressRallyEnabled) {
+                        longPressTimer = setTimeout(() => {
+                            longPressTimer = null;
+                            longPressFired = true;
+                            isBoxSelecting = false;
+                            selectionBox = null;
+                            let syntheticRight = new MouseEvent('mousedown', { button: 2, clientX: t.clientX, clientY: t.clientY });
+                            gameArea.dispatchEvent(syntheticRight);
+                        }, 300);
+                    }
                 } else if (keys.length === 2) {
+                    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
                     isBoxSelecting = false;
                     selectionBox = null;
                     let t1 = activeTouches[keys[0]], t2 = activeTouches[keys[1]];
@@ -4825,8 +4849,20 @@
                 if (keys.length === 1 && keys[0] == singleTouchId) {
                     let t = activeTouches[keys[0]];
 
-                    let syntheticMove = new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY });
-                    gameArea.dispatchEvent(syntheticMove);
+                    if (longPressTimer) {
+                        let limit = Math.min(gameArea.clientWidth, gameArea.clientHeight) * 0.10;
+                        let dx = t.clientX - touchStartX;
+                        let dy = t.clientY - touchStartY;
+                        if (Math.hypot(dx, dy) > limit) {
+                            clearTimeout(longPressTimer);
+                            longPressTimer = null;
+                        }
+                    }
+
+                    if (!longPressFired) {
+                        let syntheticMove = new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY });
+                        gameArea.dispatchEvent(syntheticMove);
+                    }
                 } else if (keys.length === 2 && touchCenterInitial) {
                     let t1 = activeTouches[keys[0]], t2 = activeTouches[keys[1]];
                     let dx = t1.clientX - t2.clientX;
@@ -4859,14 +4895,19 @@
                 }
                 let keys = Object.keys(activeTouches);
 
+                if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+
                 if (keys.length === 0) {
-                    let t = e.changedTouches[0];
-                    let button = mobileRallyMode ? 2 : 0;
-                    let syntheticUp = new MouseEvent('mouseup', { button: button, clientX: t.clientX, clientY: t.clientY });
-                    gameArea.dispatchEvent(syntheticUp);
+                    if (!longPressFired) {
+                        let t = e.changedTouches[0];
+                        let button = mobileRallyMode ? 2 : 0;
+                        let syntheticUp = new MouseEvent('mouseup', { button: button, clientX: t.clientX, clientY: t.clientY });
+                        gameArea.dispatchEvent(syntheticUp);
+                    }
                     
                     touchCenterInitial = null;
                     singleTouchId = null;
+                    longPressFired = false;
                 }
             }, { passive: false });
 
@@ -4875,16 +4916,26 @@
                 for (let i = 0; i < e.changedTouches.length; i++) {
                     delete activeTouches[e.changedTouches[i].identifier];
                 }
+                if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
                 isBoxSelecting = false;
                 selectionBox = null;
                 touchCenterInitial = null;
                 singleTouchId = null;
+                longPressFired = false;
             }, { passive: false });
 
             let mobileToggle = document.getElementById('mobile-mode-toggle');
             if (mobileToggle) {
                 mobileToggle.addEventListener('change', (e) => {
                     mobileRallyMode = e.target.checked;
+                });
+            }
+
+            let longPressToggle = document.getElementById('setting-long-press');
+            if (longPressToggle) {
+                longPressToggle.checked = longPressRallyEnabled;
+                longPressToggle.addEventListener('change', (e) => {
+                    longPressRallyEnabled = e.target.checked;
                 });
             }
         }
